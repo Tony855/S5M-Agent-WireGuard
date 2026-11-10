@@ -17,12 +17,12 @@ type Capabilities struct {
 }
 
 type PeerStatus struct {
-	PublicKey            string     `json:"publicKey"`
-	Endpoint             string     `json:"endpoint,omitempty"`
-	AllowedIPs           []string   `json:"allowedIPs,omitempty"`
-	LastHandshake        *time.Time `json:"lastHandshake,omitempty"`
-	ReceiveBytes         uint64     `json:"receiveBytes"`
-	TransmitBytes        uint64     `json:"transmitBytes"`
+	PublicKey           string     `json:"publicKey"`
+	Endpoint            string     `json:"endpoint,omitempty"`
+	AllowedIPs          []string   `json:"allowedIPs,omitempty"`
+	LastHandshake       *time.Time `json:"lastHandshake,omitempty"`
+	ReceiveBytes        uint64     `json:"receiveBytes"`
+	TransmitBytes       uint64     `json:"transmitBytes"`
 	PersistentKeepalive int        `json:"persistentKeepalive,omitempty"`
 }
 
