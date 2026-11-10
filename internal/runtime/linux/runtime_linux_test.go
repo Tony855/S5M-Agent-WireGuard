@@ -98,8 +98,8 @@ func TestApplyConfigAndCleansTemporarySecret(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 0 {
-		t.Fatalf("temporary config remains: %v", files)
+	if len(files) != 1 || files[0].Name() != "wgtest.managed" {
+		t.Fatalf("expected only ownership marker after apply; found: %v", files)
 	}
 }
 
