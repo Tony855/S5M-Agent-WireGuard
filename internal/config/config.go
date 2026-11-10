@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"runtime"
 
 	"gopkg.in/yaml.v3"
 )
@@ -113,9 +112,6 @@ func safeDataFile(dataDir, name string) bool {
 	}
 }
 
-// Keep this import referenced on all supported platforms; runtime-specific
-// file permission checks are applied by the secret loader, not config parser.
-var _ = runtime.GOOS
 }
 
 func validInterfaceName(name string) bool {
