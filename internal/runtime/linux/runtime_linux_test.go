@@ -18,7 +18,8 @@ import (
 type fakeRunner struct {
 	calls  []string
 	fail   string
-	output []byte
+	output     []byte
+	linkOutput string
 }
 
 func (f *fakeRunner) LookPath(name string) (string, error) { return "/usr/bin/" + name, nil }
@@ -30,6 +31,9 @@ func (f *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte
 		return nil, errors.New("injected failure")
 	}
 	if strings.Contains(call, "link show") {
+		if f.linkOutput != "" {
+			return []byte(f.linkOutput), nil
+		}
 		return nil, errors.New("not found")
 	}
 	if name == "wg" && len(args) == 3 && args[2] == "dump" {
@@ -167,5 +171,36 @@ func TestLinkIsUpUsesInterfaceFlags(t *testing.T) {
 	}
 	if linkIsUp("malformed output") {
 		t.Fatal("malformed link output must not be treated as running")
+	}
+}
+
+func TestStatusReadsLinkStateAndPeerCounters(t *testing.T) {
+	_, fake, runtime := setup(t)
+	fake.linkOutput = "7: wgtest: <POINTOPOINT,NOARP,UP,LOWER_UP> mtu 1420"
+	fake.output = []byte("private\tpublic\t51820\toff\n" +
+		"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t(none)\t198.51.100.10:51820\t10.77.0.2/32\t1700000000\t1234\t5678\t25\n")
+
+	status, err := runtime.Status(context.Background(), "wgtest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.Running || status.ListenPort != 51820 || len(status.Peers) != 1 {
+		t.Fatalf("unexpected interface status: %+v", status)
+	}
+	if status.Peers[0].ReceiveBytes != 1234 || status.Peers[0].TransmitBytes != 5678 {
+		t.Fatalf("unexpected peer counters: %+v", status.Peers[0])
+	}
+}
+
+func TestStatusDoesNotTreatDownInterfaceAsRunning(t *testing.T) {
+	_, fake, runtime := setup(t)
+	fake.linkOutput = "7: wgtest: <POINTOPOINT,NOARP> mtu 1420"
+	fake.output = []byte("private\tpublic\t51820\toff\n")
+	status, err := runtime.Status(context.Background(), "wgtest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Running {
+		t.Fatalf("down interface reported running: %+v", status)
 	}
 }
