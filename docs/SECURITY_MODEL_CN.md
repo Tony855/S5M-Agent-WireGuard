@@ -29,6 +29,6 @@
 - 生成的 `wg setconf` 临时文件权限为 0600；完成后先尽力覆盖为零，再删除。闪存、写时复制文件系统和快照可能保留旧块，因此这不是安全擦除保证。
 - 配置文本在写入临时文件后，对可控的内存缓冲区执行清零；Go 运行时及编译器仍可能存在不可控副本，不能承诺绝对内存擦除。
 - 外部命令的 stderr 不进入应用日志或 RPC 错误，避免 `wg` 在配置错误时回显包含私钥的配置行。
-- Peer 遥测只返回公钥、Endpoint、AllowedIPs、握手时间、流量计数和 Keepalive，不读取或返回私钥/PSK。
+- Peer 遥测通过 `wg show` 的独立字段读取，不调用会包含接口私钥的 `wg show dump`；只返回公钥、Endpoint、AllowedIPs、握手时间、流量计数和 Keepalive，不读取或返回私钥/PSK。
 
 - Linux `stop` 在删除接口前必须由 `wg show` 确认该接口确实是 WireGuard，避免误删 `eth0` 等普通网卡；状态采集也不会把普通网卡误报为 WireGuard 正常运行。
