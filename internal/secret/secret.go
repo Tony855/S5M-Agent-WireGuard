@@ -1,6 +1,7 @@
 package secret
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -32,6 +33,7 @@ func GeneratePrivateKey(dataDir, relativePath string) error {
 	}
 	defer wipe(key)
 	encoded := []byte(base64.StdEncoding.EncodeToString(key) + "\n")
+	defer wipe(encoded)
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return fmt.Errorf("create secret file: %w", err)
@@ -77,11 +79,13 @@ func ReadKey(dataDir, relativePath string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read secret file: %w", err)
 	}
-	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(encoded)))
-	if err != nil || len(raw) != 32 {
+	trimmed := bytes.TrimSpace(encoded)
+	raw := make([]byte, base64.StdEncoding.DecodedLen(len(trimmed)))
+	n, err := base64.StdEncoding.Decode(raw, trimmed)
+	if err != nil || n != 32 {
 		return nil, errors.New("secret file must contain a base64-encoded 32-byte key")
 	}
-	return raw, nil
+	return raw[:n], nil
 }
 
 func resolveDataPath(dataDir, relativePath string) (string, error) {
