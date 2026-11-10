@@ -29,6 +29,8 @@ jobs:
         run: |
           files="$(gofmt -l .)"
           if [ -n "$files" ]; then
+            echo "gofmt diff:"
+            gofmt -d $files
             while IFS= read -r file; do
               echo "::error file=$file,title=Go formatting::Run gofmt -w $file"
             done <<< "$files"
