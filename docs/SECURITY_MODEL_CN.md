@@ -31,4 +31,5 @@
 - 外部命令的 stderr 不进入应用日志或 RPC 错误，避免 `wg` 在配置错误时回显包含私钥的配置行。
 - Peer 遥测通过 `wg show` 的独立字段读取，不调用会包含接口私钥的 `wg show dump`；只返回公钥、Endpoint、AllowedIPs、握手时间、流量计数和 Keepalive，不读取或返回私钥/PSK。
 
-- Linux `stop` 在删除接口前必须由 `wg show` 确认该接口确实是 WireGuard，避免误删 `eth0` 等普通网卡；状态采集也不会把普通网卡误报为 WireGuard 正常运行。
+- Agent 在 `dataDir/runtime/<interface>.managed` 写入 0600 所有权标记；状态读取和停止操作必须先验证标记，避免管理主机上其他 WireGuard 接口。
+- Linux `stop` 在删除接口前还必须由 `wg show` 确认该接口确实是 WireGuard，避免误删 `eth0` 等普通网卡；状态采集也不会把普通网卡误报为 WireGuard 正常运行。
