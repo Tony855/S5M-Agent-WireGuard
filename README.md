@@ -41,6 +41,9 @@
 wg-agent version
 wg-agent keygen --data-dir /data --output secrets/server.key
 wg-agent config-validate --config /data/config.yaml
+wg-agent apply --data-dir /data --config /data/config.yaml
+wg-agent status --data-dir /data --interface wg0
+wg-agent stop --data-dir /data --interface wg0
 ```
 
 密钥命令只写入文件，不打印私钥。示例配置仅用于说明格式，不代表可直接部署。
