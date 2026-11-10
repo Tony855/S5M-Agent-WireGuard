@@ -85,9 +85,10 @@ func apply(args []string) {
 
 func status(args []string) {
 	fs := flag.NewFlagSet("status", flag.ExitOnError)
+	dataDir := fs.String("data-dir", "/data", "persistent data directory")
 	name := fs.String("interface", "wg0", "WireGuard interface name")
 	_ = fs.Parse(args)
-	result, err := linux.New("/data").Status(context.Background(), *name)
+	result, err := linux.New(*dataDir).Status(context.Background(), *name)
 	if err != nil {
 		fatal(err)
 	}
@@ -96,9 +97,10 @@ func status(args []string) {
 
 func stop(args []string) {
 	fs := flag.NewFlagSet("stop", flag.ExitOnError)
+	dataDir := fs.String("data-dir", "/data", "persistent data directory")
 	name := fs.String("interface", "wg0", "WireGuard interface name")
 	_ = fs.Parse(args)
-	if err := linux.New("/data").Stop(context.Background(), *name); err != nil {
+	if err := linux.New(*dataDir).Stop(context.Background(), *name); err != nil {
 		fatal(err)
 	}
 	writeJSON(map[string]any{"stopped": true, "interface": *name})
