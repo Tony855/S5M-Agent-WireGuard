@@ -325,3 +325,20 @@ func TestProbeConfirmsKernelWireGuardSupport(t *testing.T) {
 		t.Fatalf("probe did not query the kernel API: %v", fake.calls)
 	}
 }
+
+func TestApplyDoesNotDeleteInterfaceWhenAtomicCreateFails(t *testing.T) {
+	_, fake, runtime := setup(t)
+	fake.fail = "ip link add dev wgtest type wireguard"
+
+	if err := runtime.Apply(context.Background(), testConfig()); err == nil {
+		t.Fatal("expected atomic interface creation failure")
+	}
+	if len(fake.calls) != 2 || fake.calls[0] != "wg show interfaces" || fake.calls[1] != fake.fail {
+		t.Fatalf("unexpected commands after failed atomic create: %v", fake.calls)
+	}
+	for _, call := range fake.calls {
+		if strings.Contains(call, "ip link delete") {
+			t.Fatalf("failed create must never trigger interface deletion: %v", fake.calls)
+		}
+	}
+}
