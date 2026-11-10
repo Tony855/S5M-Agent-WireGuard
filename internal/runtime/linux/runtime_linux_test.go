@@ -68,6 +68,13 @@ func setup(t *testing.T) (string, *fakeRunner, *Runtime) {
 	return dir, fake, &Runtime{DataDir: dir, Runner: fake}
 }
 
+func markManaged(t *testing.T, runtime *Runtime, name string) {
+	t.Helper()
+	if err := runtime.writeManagedMarker(name); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestApplyConfigAndCleansTemporarySecret(t *testing.T) {
 	dir, fake, runtime := setup(t)
 	if err := runtime.Apply(context.Background(), testConfig()); err != nil {
@@ -83,6 +90,9 @@ func TestApplyConfigAndCleansTemporarySecret(t *testing.T) {
 		if !strings.Contains(calls, want) {
 			t.Fatalf("missing %q in %s", want, calls)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "runtime", "wgtest.managed")); err != nil {
+		t.Fatalf("managed interface marker missing: %v", err)
 	}
 	files, err := os.ReadDir(filepath.Join(dir, "runtime"))
 	if err != nil {
@@ -206,6 +216,7 @@ func TestLinkIsUpUsesInterfaceFlags(t *testing.T) {
 
 func TestStatusReadsLinkStateAndPeerCounters(t *testing.T) {
 	_, fake, runtime := setup(t)
+	markManaged(t, runtime, "wgtest")
 	fake.linkOutput = "7: wgtest: <POINTOPOINT,NOARP,UP,LOWER_UP> mtu 1420"
 	fake.outputs = telemetryOutputs("wgtest")
 
@@ -223,6 +234,7 @@ func TestStatusReadsLinkStateAndPeerCounters(t *testing.T) {
 
 func TestStatusDoesNotTreatDownInterfaceAsRunning(t *testing.T) {
 	_, fake, runtime := setup(t)
+	markManaged(t, runtime, "wgtest")
 	fake.linkOutput = "7: wgtest: <POINTOPOINT,NOARP> mtu 1420"
 	fake.outputs = telemetryOutputs("wgtest")
 	status, err := runtime.Status(context.Background(), "wgtest")
@@ -236,6 +248,7 @@ func TestStatusDoesNotTreatDownInterfaceAsRunning(t *testing.T) {
 
 func TestStopRefusesNonWireGuardInterface(t *testing.T) {
 	_, fake, runtime := setup(t)
+	markManaged(t, runtime, "eth0")
 	fake.fail = "wg show eth0"
 	if err := runtime.Stop(context.Background(), "eth0"); err == nil {
 		t.Fatal("expected refusal for non-WireGuard interface")
@@ -249,6 +262,7 @@ func TestStopRefusesNonWireGuardInterface(t *testing.T) {
 
 func TestStatusDoesNotMarkNonWireGuardInterfaceRunning(t *testing.T) {
 	_, fake, runtime := setup(t)
+	markManaged(t, runtime, "eth0")
 	fake.linkOutput = "2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500"
 	fake.fail = "wg show eth0 peers"
 	status, err := runtime.Status(context.Background(), "eth0")
@@ -257,5 +271,29 @@ func TestStatusDoesNotMarkNonWireGuardInterfaceRunning(t *testing.T) {
 	}
 	if status.Running || status.LastError == "" {
 		t.Fatalf("unverified interface reported as WireGuard: %+v", status)
+	}
+}
+
+func TestStopRequiresManagedMarker(t *testing.T) {
+	_, fake, runtime := setup(t)
+	if err := runtime.Stop(context.Background(), "wg0"); err == nil {
+		t.Fatal("expected unmanaged interface refusal")
+	}
+	if len(fake.calls) != 0 {
+		t.Fatalf("commands ran for unmanaged interface: %v", fake.calls)
+	}
+}
+
+func TestStopRemovesManagedMarkerAfterDeletingInterface(t *testing.T) {
+	dir, fake, runtime := setup(t)
+	markManaged(t, runtime, "wgtest")
+	if err := runtime.Stop(context.Background(), "wgtest"); err != nil {
+		t.Fatal(err)
+	}
+	if fake.calls[len(fake.calls)-1] != "ip link delete dev wgtest" {
+		t.Fatalf("unexpected stop commands: %v", fake.calls)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "runtime", "wgtest.managed")); !os.IsNotExist(err) {
+		t.Fatalf("managed marker should be removed after stop, stat error: %v", err)
 	}
 }
