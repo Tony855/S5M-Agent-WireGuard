@@ -66,3 +66,11 @@ RouterOS Container 使用 VETH 接入独立受控 bridge/VLAN。容器管理流�
 ## 8. 当前实现状态
 
 当前仓库第一阶段只提供严格配置模型和 Runtime 契约。Linux/RouterOS backend、Agent WebSocket、Docker 镜像和 RouterOS 实机验收尚未完成，不得把示例配置或 CI 通过误认为生产可用。
+
+
+## Linux Runtime 状态语义
+
+- `Status.Running` 依据 `ip link show` 的接口标志中是否包含 `UP`，不再把“接口存在”当作“接口已启动”。
+- Peer 状态读取 `wg show <iface> dump`：包括 Endpoint、AllowedIPs、最近握手 Unix 时间、接收/发送字节和 PersistentKeepalive。
+- `LastHandshake == nil` 表示从未完成握手（或内核返回 0），不能把接口 UP 等同于 Peer 在线；上层应结合握手时间阈值判断新鲜度。
+- 当前仍未实施路由快照、默认路由管理、管理通道保护和已有接口原地更新。
