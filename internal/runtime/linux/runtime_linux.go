@@ -135,7 +135,7 @@ func (r *Runtime) buildWGConfig(cfg config.Config) (string, func(), error) {
 	defer wipe(key)
 
 	var b bytes.Buffer
-	defer wipe(b.Bytes())
+	defer func() { wipe(b.Bytes()) }()
 	b.WriteString("private_key = ")
 	b.WriteString(base64.StdEncoding.EncodeToString(key))
 	b.WriteByte('\n')
