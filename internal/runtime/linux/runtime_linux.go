@@ -235,12 +235,12 @@ func (r *Runtime) Status(ctx context.Context, name string) (wr.Status, error) {
 	if err != nil {
 		return status, nil
 	}
-	status.Running = linkIsUp(string(link))
 	dump, err := r.runner().Run(ctx, "wg", "show", name, "dump")
 	if err != nil {
-		status.LastError = "interface exists but WireGuard peer status could not be read"
+		status.LastError = "interface exists but is not confirmed as a WireGuard interface"
 		return status, nil
 	}
+	status.Running = linkIsUp(string(link))
 	if err := parseDump(string(dump), &status); err != nil {
 		status.LastError = "WireGuard status output was malformed"
 		return status, fmt.Errorf("parse WireGuard status: %w", err)
@@ -320,7 +320,11 @@ func (r *Runtime) Stop(ctx context.Context, name string) error {
 	if !validName(name) {
 		return errors.New("invalid interface name")
 	}
-	if _, err := r.runner().Run(ctx, "ip", "link", "delete", "dev", name); err != nil {
+	run := r.runner()
+	if _, err := run.Run(ctx, "wg", "show", name); err != nil {
+		return errors.New("refusing to delete an interface that is not confirmed as WireGuard")
+	}
+	if _, err := run.Run(ctx, "ip", "link", "delete", "dev", name); err != nil {
 		return fmt.Errorf("delete WireGuard interface: %w", err)
 	}
 	return nil
