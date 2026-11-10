@@ -450,7 +450,11 @@ func (r *Runtime) writeManagedMarker(name string) error {
 }
 
 func (r *Runtime) verifyManagedMarker(name string) error {
-	path := r.markerPath(name)
+	dir, err := r.runtimeDir()
+	if err != nil {
+		return errors.New("managed runtime directory is unavailable or unsafe")
+	}
+	path := filepath.Join(dir, name+".managed")
 	info, err := os.Lstat(path)
 	if err != nil {
 		return errors.New("interface is not registered as managed by this agent")
