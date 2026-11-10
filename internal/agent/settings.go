@@ -60,7 +60,7 @@ func LoadSettings(path string) (Settings, error) {
 
 func (s Settings) Validate() error {
 	controllerURL := strings.TrimSpace(s.ControllerURL)
-	if controllerURL == "" || strings.ContainsAny(controllerURL, "\\r\\n") {
+	if controllerURL == "" || strings.ContainsAny(controllerURL, "\r\n") {
 		return errors.New("controllerURL is required")
 	}
 	parsed, err := url.Parse(controllerURL)
@@ -86,7 +86,7 @@ func (s Settings) Validate() error {
 	if strings.TrimSpace(s.Secret) == "" && strings.TrimSpace(s.Token) == "" {
 		return errors.New("either secret (first registration) or token is required")
 	}
-	if strings.ContainsAny(s.Secret+s.Token, "\\r\\n") {
+	if strings.ContainsAny(s.Secret+s.Token, "\r\n") {
 		return errors.New("Agent credentials must not contain newlines")
 	}
 	return nil
