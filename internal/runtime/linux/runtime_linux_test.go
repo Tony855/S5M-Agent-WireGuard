@@ -18,7 +18,7 @@ import (
 type fakeRunner struct {
 	calls      []string
 	fail       string
-	output     []byte
+	outputs    map[string][]byte
 	linkOutput string
 }
 
@@ -36,8 +36,10 @@ func (f *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte
 		}
 		return nil, errors.New("not found")
 	}
-	if name == "wg" && len(args) == 3 && args[2] == "dump" {
-		return f.output, nil
+	if name == "wg" {
+		if output, ok := f.outputs[call]; ok {
+			return output, nil
+		}
 	}
 	return nil, nil
 }
@@ -121,11 +123,31 @@ func TestStatusRejectsUnsafeName(t *testing.T) {
 	}
 }
 
-func TestParseDumpReturnsPeerTelemetry(t *testing.T) {
+func telemetryOutputs(name string) map[string][]byte {
+	key := "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	return map[string][]byte{
+		"wg show " + name + " listen-port": []byte("51820\n"),
+		"wg show " + name + " peers": []byte(key + "\n"),
+		"wg show " + name + " endpoints": []byte(key + "\t198.51.100.10:51820\n"),
+		"wg show " + name + " allowed-ips": []byte(key + "\t10.77.0.2/32,fd77::2/128\n"),
+		"wg show " + name + " latest-handshakes": []byte(key + "\t1700000000\n"),
+		"wg show " + name + " transfer": []byte(key + "\t1234\t5678\n"),
+		"wg show " + name + " persistent-keepalive": []byte(key + "\t25\n"),
+	}
+}
+
+func TestParseTelemetryReturnsPeerStatsWithoutPrivateKeyDump(t *testing.T) {
 	status := wr.Status{}
-	dump := "private\tpublic\t51820\toff\n" +
-		"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t(none)\t198.51.100.10:51820\t10.77.0.2/32,fd77::2/128\t1700000000\t1234\t5678\t25\n"
-	if err := parseDump(dump, &status); err != nil {
+	values := map[string]string{
+		"listen-port": "51820",
+		"peers": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+		"endpoints": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t198.51.100.10:51820",
+		"allowed-ips": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t10.77.0.2/32,fd77::2/128",
+		"latest-handshakes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t1700000000",
+		"transfer": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t1234\t5678",
+		"persistent-keepalive": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t25",
+	}
+	if err := parseTelemetry(values, &status); err != nil {
 		t.Fatal(err)
 	}
 	if status.ListenPort != 51820 || len(status.Peers) != 1 {
@@ -143,18 +165,26 @@ func TestParseDumpReturnsPeerTelemetry(t *testing.T) {
 	}
 }
 
-func TestParseDumpRejectsMalformedPeerRow(t *testing.T) {
+func TestParseTelemetryRejectsMalformedCounters(t *testing.T) {
 	status := wr.Status{}
-	if err := parseDump("private\tpublic\t51820\toff\nshort\trow\n", &status); err == nil {
-		t.Fatal("expected malformed dump error")
+	values := map[string]string{
+		"listen-port": "51820",
+		"peers": "peer-key",
+		"transfer": "peer-key\t123",
+	}
+	if err := parseTelemetry(values, &status); err == nil {
+		t.Fatal("expected malformed transfer counter error")
 	}
 }
 
-func TestParseDumpLeavesNeverConnectedHandshakeUnset(t *testing.T) {
+func TestParseTelemetryLeavesNeverConnectedHandshakeUnset(t *testing.T) {
 	status := wr.Status{}
-	dump := "private\tpublic\t0\toff\n" +
-		"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t(none)\t(none)\t10.77.0.2/32\t0\t0\t0\t0\n"
-	if err := parseDump(dump, &status); err != nil {
+	values := map[string]string{
+		"listen-port": "0",
+		"peers": "peer-key",
+		"latest-handshakes": "peer-key\t0",
+	}
+	if err := parseTelemetry(values, &status); err != nil {
 		t.Fatal(err)
 	}
 	if status.Peers[0].LastHandshake != nil {
@@ -177,8 +207,7 @@ func TestLinkIsUpUsesInterfaceFlags(t *testing.T) {
 func TestStatusReadsLinkStateAndPeerCounters(t *testing.T) {
 	_, fake, runtime := setup(t)
 	fake.linkOutput = "7: wgtest: <POINTOPOINT,NOARP,UP,LOWER_UP> mtu 1420"
-	fake.output = []byte("private\tpublic\t51820\toff\n" +
-		"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t(none)\t198.51.100.10:51820\t10.77.0.2/32\t1700000000\t1234\t5678\t25\n")
+	fake.outputs = telemetryOutputs("wgtest")
 
 	status, err := runtime.Status(context.Background(), "wgtest")
 	if err != nil {
@@ -195,7 +224,7 @@ func TestStatusReadsLinkStateAndPeerCounters(t *testing.T) {
 func TestStatusDoesNotTreatDownInterfaceAsRunning(t *testing.T) {
 	_, fake, runtime := setup(t)
 	fake.linkOutput = "7: wgtest: <POINTOPOINT,NOARP> mtu 1420"
-	fake.output = []byte("private\tpublic\t51820\toff\n")
+	fake.outputs = telemetryOutputs("wgtest")
 	status, err := runtime.Status(context.Background(), "wgtest")
 	if err != nil {
 		t.Fatal(err)
@@ -221,7 +250,7 @@ func TestStopRefusesNonWireGuardInterface(t *testing.T) {
 func TestStatusDoesNotMarkNonWireGuardInterfaceRunning(t *testing.T) {
 	_, fake, runtime := setup(t)
 	fake.linkOutput = "2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500"
-	fake.fail = "wg show eth0 dump"
+	fake.fail = "wg show eth0 peers"
 	status, err := runtime.Status(context.Background(), "eth0")
 	if err != nil {
 		t.Fatal(err)
