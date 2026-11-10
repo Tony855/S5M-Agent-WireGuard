@@ -74,3 +74,21 @@ func TestRejectsSymlinkEscape(t *testing.T) {
 		t.Fatal("accepted secret path escaping through symlink")
 	}
 }
+
+func TestRejectsInvalidEndpointPort(t *testing.T) {
+	cfg := validConfig()
+	cfg.Interface.Role = "client"
+	cfg.Peers[0].Endpoint = "vpn.example.com:70000"
+	if err := cfg.Validate(t.TempDir()); err == nil || !strings.Contains(err.Error(), "port must be between") {
+		t.Fatalf("expected invalid endpoint port rejection, got %v", err)
+	}
+}
+
+func TestRouterOSNativeDoesNotRequireContainerPrivateKey(t *testing.T) {
+	cfg := validConfig()
+	cfg.Interface.Backend = "routeros-native"
+	cfg.Interface.PrivateKeyFile = ""
+	if err := cfg.Validate(t.TempDir()); err != nil {
+		t.Fatalf("RouterOS-native config should keep private key on RouterOS: %v", err)
+	}
+}
