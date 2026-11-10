@@ -2,6 +2,8 @@ package config
 
 import (
 	"encoding/base64"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -43,4 +45,11 @@ func TestRejectsClientWithoutEndpoint(t *testing.T) {
 func TestRejectsUnknownBackend(t *testing.T) {
 	cfg := validConfig(); cfg.Interface.Backend = "shell"
 	if err := cfg.Validate(t.TempDir()); err == nil { t.Fatal("expected unknown backend rejection") }
+}
+
+func TestRejectsSymlinkEscape(t *testing.T) {
+	dataDir := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(dataDir, "secrets")); err != nil { t.Skipf("symlink unavailable: %v", err) }
+	if safeDataFile(dataDir, "secrets/private.key") { t.Fatal("accepted secret path escaping through symlink") }
 }
