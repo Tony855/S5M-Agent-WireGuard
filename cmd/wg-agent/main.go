@@ -6,7 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
+	"github.com/Tony855/S5M-Agent-WireGuard/internal/agent"
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/config"
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/runtime/linux"
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/secret"
@@ -31,13 +34,15 @@ func main() {
 		status(os.Args[2:])
 	case "stop":
 		stop(os.Args[2:])
+	case "agent-run":
+		agentRun(os.Args[2:])
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: wg-agent <version|config-validate|keygen|apply|status|stop>")
+	fmt.Fprintln(os.Stderr, "usage: wg-agent <version|config-validate|keygen|apply|status|stop|agent-run>")
 	os.Exit(2)
 }
 
@@ -105,6 +110,30 @@ func stop(args []string) {
 		fatal(err)
 	}
 	writeJSON(map[string]any{"stopped": true, "interface": *name})
+}
+
+func agentRun(args []string) {
+	fs := flag.NewFlagSet("agent-run", flag.ExitOnError)
+	settingsPath := fs.String("agent-config", "/data/agent.yaml", "protected Agent settings file")
+	configPath := fs.String("config", "/data/config.yaml", "WireGuard YAML config")
+	dataDir := fs.String("data-dir", "/data", "persistent data directory")
+	_ = fs.Parse(args)
+	settings, err := agent.LoadSettings(*settingsPath)
+	if err != nil {
+		fatal(err)
+	}
+	runtime := linux.New(*dataDir)
+	client := &agent.Client{
+		Settings: settings, SettingsPath: *settingsPath,
+		Status: func(ctx context.Context) (map[string]any, error) {
+			return agent.BuildWireGuardStatus(ctx, *configPath, *dataDir, version, runtime), nil
+		},
+	}
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	if err := client.Run(ctx); err != nil {
+		fatal(err)
+	}
 }
 
 func writeJSON(value any) {

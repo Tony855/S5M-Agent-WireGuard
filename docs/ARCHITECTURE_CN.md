@@ -51,6 +51,8 @@
 
 ## 5. 运行状态
 
+首阶段 Agent 通过 `POST /api/v1/agent/register` 换取专属 JWT，再连接 `GET /api/v1/agent/ws`；心跳 envelope 使用 `agent_type=wireguard`，只发送类型化 WireGuard 状态和 ACK。Token 存储于 0600 的 Agent settings 文件；一次性 secret 在注册成功后清除。断线使用指数退避，最大 60 秒。当前只发送 heartbeat，不请求现有 Mihomo YAML 或 command queue。
+
 Agent 需分别上报 desired revision 与 applied revision、配置 SHA-256、backend capability、interface 状态、peer latest handshake、RX/TX bytes、错误码和时间戳。只有实际读取 backend 状态后才能标记 running/healthy；进程存活或心跳新鲜不能替代隧道健康。
 
 ## 6. 命令安全
@@ -65,7 +67,7 @@ RouterOS Container 使用 VETH 接入独立受控 bridge/VLAN。容器管理流�
 
 ## 8. 当前实现状态
 
-当前仓库第一阶段只提供严格配置模型和 Runtime 契约。Linux/RouterOS backend、Agent WebSocket、Docker 镜像和 RouterOS 实机验收尚未完成，不得把示例配置或 CI 通过误认为生产可用。
+当前仓库已具备严格配置模型、Linux kernel Runtime、Agent HTTP 初始注册、JWT 0600 持久化、WSS typed heartbeat/ACK 和指数退避重连。当前 Agent 只上报状态，不请求 Mihomo 配置，也不执行 Mihomo 命令。WireGuard 独立配置下发、命令队列、instance_id 多实例隔离、RouterOS API backend、Docker 镜像和 RouterOS 实机验收仍未完成。不得把 CI 通过误认为生产可用或 RouterOS 兼容验收。
 
 
 ## Linux Runtime 状态语义

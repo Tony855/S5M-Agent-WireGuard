@@ -34,7 +34,8 @@ WireGuard Agent 目标是接入现有 S5M Master，与 S5M-Agent-SmartDNS 共用
 - [x] 私钥文件生成和读取（0600/0700、路径边界检查、拒绝覆盖）。
 - [x] Go 单元测试、race test、vet、gofmt CI。
 - [x] Linux kernel WireGuard 首次创建流程、Peer/地址配置、状态探测、停止和新接口失败清理（不支持原地更新；默认路由拒绝）。
-- [ ] Agent WebSocket 注册、状态、配置同步和命令 ACK。
+- [x] Agent HTTP 初始注册、独立 JWT 安全保存、WebSocket typed heartbeat/ACK 和指数退避重连（首阶段仅状态上报）。
+- [ ] WireGuard 独立配置同步、命令投递和幂等 ACK。
 - [ ] RouterOS 原生 WireGuard API Adapter。
 - [ ] RouterOS Container 实机兼容性与多架构镜像。
 - [ ] 发布、升级和回滚流程。
@@ -48,9 +49,10 @@ wg-agent config-validate --config /data/config.yaml
 wg-agent apply --data-dir /data --config /data/config.yaml
 wg-agent status --data-dir /data --interface wg0
 wg-agent stop --data-dir /data --interface wg0
+wg-agent agent-run --agent-config /data/agent.yaml --data-dir /data --config /data/config.yaml
 ```
 
-密钥命令只写入文件，不打印私钥。示例配置仅用于说明格式，不代表可直接部署。
+密钥命令只写入文件，不打印私钥。示例配置仅用于说明格式，不代表可直接部署。Agent 初次注册配置见 [agent.example.yaml](agent.example.yaml)，必须设置为 0600；首次成功注册后会自动将一次性密钥替换为 JWT。`agent-run` 目前只通过 WSS 上报 WireGuard 状态，不会请求 Mihomo YAML，也不会接收或执行 Mihomo 命令。
 
 ## 安全原则
 
