@@ -97,8 +97,12 @@ func (r *Runtime) Apply(ctx context.Context, cfg config.Config) error {
 		return fmt.Errorf("create WireGuard interface: %w", err)
 	}
 	committed := false
+	markerCreated := false
 	defer func() {
 		if !committed {
+			if markerCreated {
+				_ = os.Remove(r.markerPath(cfg.Interface.Name))
+			}
 			_, _ = run.Run(context.Background(), "ip", "link", "delete", "dev", cfg.Interface.Name)
 		}
 	}()
@@ -124,6 +128,10 @@ func (r *Runtime) Apply(ctx context.Context, cfg config.Config) error {
 	if _, err = run.Run(ctx, "ip", "link", "set", "dev", cfg.Interface.Name, "up"); err != nil {
 		return fmt.Errorf("bring interface up: %w", err)
 	}
+	if err := r.writeManagedMarker(cfg.Interface.Name); err != nil {
+		return fmt.Errorf("record managed interface ownership: %w", err)
+	}
+	markerCreated = true
 	committed = true
 	return nil
 }
@@ -170,9 +178,9 @@ func (r *Runtime) buildWGConfig(cfg config.Config) (string, func(), error) {
 		}
 	}
 
-	dir := filepath.Join(r.DataDir, "runtime")
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return "", func() {}, fmt.Errorf("create runtime directory: %w", err)
+	dir, err := r.runtimeDir()
+	if err != nil {
+		return "", func() {}, fmt.Errorf("prepare runtime directory: %w", err)
 	}
 	file, err := os.CreateTemp(dir, "wg-setconf-*.conf")
 	if err != nil {
@@ -229,6 +237,9 @@ func (r *Runtime) buildWGConfig(cfg config.Config) (string, func(), error) {
 func (r *Runtime) Status(ctx context.Context, name string) (wr.Status, error) {
 	if !validName(name) {
 		return wr.Status{}, errors.New("invalid interface name")
+	}
+	if err := r.verifyManagedMarker(name); err != nil {
+		return wr.Status{}, err
 	}
 	status := wr.Status{Interface: name, Backend: "linux-kernel"}
 	link, err := r.runner().Run(ctx, "ip", "link", "show", "dev", name)
@@ -356,12 +367,103 @@ func (r *Runtime) Stop(ctx context.Context, name string) error {
 	if !validName(name) {
 		return errors.New("invalid interface name")
 	}
+	if err := r.verifyManagedMarker(name); err != nil {
+		return err
+	}
 	run := r.runner()
 	if _, err := run.Run(ctx, "wg", "show", name); err != nil {
 		return errors.New("refusing to delete an interface that is not confirmed as WireGuard")
 	}
 	if _, err := run.Run(ctx, "ip", "link", "delete", "dev", name); err != nil {
 		return fmt.Errorf("delete WireGuard interface: %w", err)
+	}
+	if err := os.Remove(r.markerPath(name)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove managed interface marker: %w", err)
+	}
+	return nil
+}
+
+func (r *Runtime) runtimeDir() (string, error) {
+	root, err := filepath.Abs(r.DataDir)
+	if err != nil {
+		return "", err
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(resolvedRoot, "runtime")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("runtime path must be a real directory")
+	}
+	if err := os.Chmod(dir, 0700); err != nil {
+		return "", err
+	}
+	resolvedDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(resolvedRoot, resolvedDir)
+	if err != nil || rel != "runtime" {
+		return "", errors.New("runtime directory escapes data directory")
+	}
+	return dir, nil
+}
+
+func (r *Runtime) markerPath(name string) string {
+	return filepath.Join(r.DataDir, "runtime", name+".managed")
+}
+
+func (r *Runtime) writeManagedMarker(name string) error {
+	dir, err := r.runtimeDir()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(dir, name+".managed")
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+	}
+	data := []byte("s5m-agent-wireguard/v1\n" + name + "\n")
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return err
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return err
+	}
+	return nil
+}
+
+func (r *Runtime) verifyManagedMarker(name string) error {
+	path := r.markerPath(name)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return errors.New("interface is not registered as managed by this agent")
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+		return errors.New("managed interface marker has unsafe file type or permissions")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return errors.New("managed interface marker cannot be read")
+	}
+	if string(data) != "s5m-agent-wireguard/v1\n"+name+"\n" {
+		return errors.New("managed interface marker is invalid")
 	}
 	return nil
 }
