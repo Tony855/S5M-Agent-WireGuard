@@ -29,7 +29,7 @@
 - [x] 严格版本化 YAML 配置模型、Peer/AllowedIPs 校验。
 - [x] 私钥文件生成和读取（0600/0700、路径边界检查、拒绝覆盖）。
 - [x] Go 单元测试、race test、vet、gofmt CI。
-- [ ] Linux kernel WireGuard 数据面和事务式回滚。
+- [x] Linux kernel WireGuard 首次创建流程、Peer/地址配置、状态探测、停止和新接口失败清理（不支持原地更新；默认路由拒绝）。
 - [ ] Agent WebSocket 注册、状态、配置同步和命令 ACK。
 - [ ] RouterOS 原生 WireGuard API Adapter。
 - [ ] RouterOS Container 实机兼容性与多架构镜像。
