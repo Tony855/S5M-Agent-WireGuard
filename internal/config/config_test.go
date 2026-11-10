@@ -92,3 +92,27 @@ func TestRouterOSNativeDoesNotRequireContainerPrivateKey(t *testing.T) {
 		t.Fatalf("RouterOS-native config should keep private key on RouterOS: %v", err)
 	}
 }
+
+func TestLoadRejectsMultipleYAMLDocuments(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	body := "apiVersion: s5m.wireguard/v1alpha1\ninterface:\n  name: wg0\n  role: server\n  backend: linux-kernel\n  privateKeyFile: key\n---\napiVersion: s5m.wireguard/v1alpha1\n"
+	if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "multiple YAML documents") {
+		t.Fatalf("expected multiple-document rejection, got %v", err)
+	}
+}
+
+func TestLoadRejectsUnknownFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	body := "apiVersion: s5m.wireguard/v1alpha1\ninterface:\n  name: wg0\n  role: server\n  backend: linux-kernel\n  privateKeyFile: key\n  unexpected: true\n"
+	if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "field unexpected not found") {
+		t.Fatalf("expected unknown-field rejection, got %v", err)
+	}
+}
