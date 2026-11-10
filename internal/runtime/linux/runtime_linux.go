@@ -97,9 +97,10 @@ func (r *Runtime) Apply(ctx context.Context, cfg config.Config) error {
 	}
 
 	run := r.runner()
-	if _, err := run.Run(ctx, "ip", "link", "show", "dev", cfg.Interface.Name); err == nil {
-		return errors.New("interface already exists; refusing non-transactional in-place update; stop before applying a replacement")
-	}
+	// Let the kernel's link-add operation atomically arbitrate interface-name
+	// ownership. A prior "ip link show" error cannot distinguish "not found"
+	// from permission, namespace, or context failures; treating every error as
+	// absence could proceed under a false assumption.
 	if _, err := run.Run(ctx, "ip", "link", "add", "dev", cfg.Interface.Name, "type", "wireguard"); err != nil {
 		return fmt.Errorf("create WireGuard interface: %w", err)
 	}
