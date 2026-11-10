@@ -11,7 +11,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/config"
 	wr "github.com/Tony855/S5M-Agent-WireGuard/internal/runtime"
@@ -63,7 +65,7 @@ func (r *Runtime) Probe(context.Context) wr.Capabilities {
 		return caps
 	}
 	caps.Available = true
-	caps.Features = []string{"kernel-wireguard", "ipv4", "ipv6"}
+	caps.Features = []string{"kernel-wireguard", "ipv4", "ipv6", "peer-handshake-status", "transfer-counters"}
 	return caps
 }
 
@@ -206,10 +208,70 @@ func (r *Runtime) Status(ctx context.Context, name string) (wr.Status, error) {
 		return status, nil
 	}
 	status.Running = true
-	if _, err := r.runner().Run(ctx, "wg", "show", name); err != nil {
-		status.LastError = "interface exists but WireGuard status could not be read"
+	dump, err := r.runner().Run(ctx, "wg", "show", name, "dump")
+	if err != nil {
+		status.LastError = "interface exists but WireGuard peer status could not be read"
+		return status, nil
+	}
+	if err := parseDump(string(dump), &status); err != nil {
+		status.LastError = "WireGuard status output was malformed"
+		return status, fmt.Errorf("parse WireGuard status: %w", err)
 	}
 	return status, nil
+}
+
+func parseDump(output string, status *wr.Status) error {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
+		return errors.New("empty wg dump")
+	}
+	iface := strings.Fields(lines[0])
+	if len(iface) != 4 {
+		return fmt.Errorf("interface row has %d fields; want 4", len(iface))
+	}
+	port, err := strconv.Atoi(iface[2])
+	if err != nil || port < 0 || port > 65535 {
+		return errors.New("invalid listen port in wg dump")
+	}
+	status.ListenPort = port
+	for i, line := range lines[1:] {
+		fields := strings.Fields(line)
+		if len(fields) != 8 {
+			return fmt.Errorf("peer row %d has %d fields; want 8", i, len(fields))
+		}
+		receive, err := strconv.ParseUint(fields[5], 10, 64)
+		if err != nil {
+			return fmt.Errorf("peer row %d has invalid receive counter", i)
+		}
+		transmit, err := strconv.ParseUint(fields[6], 10, 64)
+		if err != nil {
+			return fmt.Errorf("peer row %d has invalid transmit counter", i)
+		}
+		keepalive, err := strconv.Atoi(fields[7])
+		if err != nil || keepalive < 0 || keepalive > 65535 {
+			return fmt.Errorf("peer row %d has invalid keepalive", i)
+		}
+		peer := wr.PeerStatus{
+			PublicKey: fields[0], ReceiveBytes: receive, TransmitBytes: transmit,
+			PersistentKeepalive: keepalive,
+		}
+		if fields[2] != "(none)" {
+			peer.Endpoint = fields[2]
+		}
+		if fields[3] != "(none)" {
+			peer.AllowedIPs = strings.Split(fields[3], ",")
+		}
+		handshake, err := strconv.ParseInt(fields[4], 10, 64)
+		if err != nil || handshake < 0 {
+			return fmt.Errorf("peer row %d has invalid handshake timestamp", i)
+		}
+		if handshake > 0 {
+			t := time.Unix(handshake, 0).UTC()
+			peer.LastHandshake = &t
+		}
+		status.Peers = append(status.Peers, peer)
+	}
+	return nil
 }
 
 func (r *Runtime) Stop(ctx context.Context, name string) error {
