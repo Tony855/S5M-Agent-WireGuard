@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"math"
 	"os"
 	goruntime "runtime"
 	"strings"
@@ -112,7 +111,7 @@ func boundedCounter(value uint64) float64 {
 }
 
 func saturatingAdd(a, b uint64) uint64 {
-	if math.MaxUint64-a < b {
+	if b > ^uint64(0)-a {
 		return math.MaxUint64
 	}
 	return a + b
