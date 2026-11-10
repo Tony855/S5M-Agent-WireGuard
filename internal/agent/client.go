@@ -139,7 +139,7 @@ func (c *Client) runSession(ctx context.Context) error {
 		dialer = &websocket.Dialer{HandshakeTimeout: 8 * time.Second}
 	}
 	header := http.Header{}
-	header.Set("Authorization", "Bearer "+c.Settings.Token)
+	header.Set("Authorization", "Bearer "+strings.TrimSpace(c.Settings.Token))
 	conn, response, err := dialer.DialContext(ctx, wsURL, header)
 	if err != nil {
 		if response != nil {
@@ -170,9 +170,10 @@ func (c *Client) runSession(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("collect WireGuard status: %w", err)
 		}
+		heartbeatID := fmt.Sprintf("wg-hb-%d", time.Now().UnixNano())
 		payload, err := json.Marshal(map[string]any{
 			"type": "heartbeat", "agent_type": "wireguard",
-			"id": fmt.Sprintf("wg-hb-%d", time.Now().UnixNano()), "status": status,
+			"id": heartbeatID, "status": status,
 		})
 		if err != nil || len(payload) > maxAgentWSMessage {
 			return errors.New("WireGuard heartbeat is invalid or exceeds the 16 KiB limit")
@@ -191,13 +192,7 @@ func (c *Client) runSession(ctx context.Context) error {
 		if err := conn.ReadJSON(&ack); err != nil {
 			return fmt.Errorf("read WireGuard heartbeat ACK: %w", err)
 		}
-		var sent struct {
-			ID string `json:"id"`
-		}
-		if err := json.Unmarshal(payload, &sent); err != nil {
-			return errors.New("decode local heartbeat ID")
-		}
-		if ack.Type != "heartbeat.ack" || ack.ID != sent.ID || !ack.OK {
+		if ack.Type != "heartbeat.ack" || ack.ID != heartbeatID || !ack.OK {
 			return fmt.Errorf("controller rejected WireGuard heartbeat: %s", ack.Message)
 		}
 		return nil
@@ -220,7 +215,7 @@ func (c *Client) runSession(ctx context.Context) error {
 }
 
 func (c *Client) controllerEndpoint(path string) (string, error) {
-	base, err := url.Parse(strings.TrimRight(c.Settings.ControllerURL, "/"))
+	base, err := url.Parse(strings.TrimRight(strings.TrimSpace(c.Settings.ControllerURL), "/"))
 	if err != nil || base.Host == "" || (base.Scheme != "http" && base.Scheme != "https") {
 		return "", errors.New("controllerURL is invalid")
 	}
