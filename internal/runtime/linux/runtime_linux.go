@@ -3,7 +3,7 @@
 package linux
 
 import (
-	"bytes"
+	"io"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -31,13 +31,11 @@ func (execRunner) LookPath(name string) (string, error) { return exec.LookPath(n
 
 func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	cmd.Stderr = io.Discard
 	out, err := cmd.Output()
 	if err != nil {
 		// stderr from wg may echo the rejected configuration line, including private keys.
 		// Keep command failures useful without leaking command output into logs or RPC errors.
-		_ = stderr
 		return nil, fmt.Errorf("%s failed: %w", name, err)
 	}
 	return out, nil
