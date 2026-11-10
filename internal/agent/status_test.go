@@ -111,7 +111,7 @@ func TestAppliedRevisionJournalRejectsInvalidInput(t *testing.T) {
 func TestBuildWireGuardStatusReportsOnlyMatchingAppliedRevision(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.yaml")
-	yaml := "apiVersion: s5m.wireguard/v1alpha1\\ninterface:\\n  name: wg0\\n  role: server\\n  backend: linux-kernel\\n  privateKeyFile: secrets/server.key\\n  addresses: []\\npeers: []\\n"
+	yaml := "apiVersion: s5m.wireguard/v1alpha1\ninterface:\n  name: wg0\n  role: server\n  backend: linux-kernel\n  privateKeyFile: secrets/server.key\n  addresses:\n    - 10.77.0.1/24\n  listenPort: 51820\npeers: []\n"
 	if err := os.WriteFile(configPath, []byte(yaml), 0o600); err != nil {
 		t.Fatal(err)
 	}
