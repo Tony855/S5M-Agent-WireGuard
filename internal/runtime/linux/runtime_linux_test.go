@@ -179,8 +179,8 @@ func TestParseTelemetryRejectsMalformedCounters(t *testing.T) {
 	status := wr.Status{}
 	values := map[string]string{
 		"listen-port": "51820",
-		"peers": "peer-key",
-		"transfer": "peer-key\t123",
+		"peers":       "peer-key",
+		"transfer":    "peer-key\t123",
 	}
 	if err := parseTelemetry(values, &status); err == nil {
 		t.Fatal("expected malformed transfer counter error")
@@ -190,8 +190,8 @@ func TestParseTelemetryRejectsMalformedCounters(t *testing.T) {
 func TestParseTelemetryLeavesNeverConnectedHandshakeUnset(t *testing.T) {
 	status := wr.Status{}
 	values := map[string]string{
-		"listen-port": "0",
-		"peers": "peer-key",
+		"listen-port":       "0",
+		"peers":             "peer-key",
 		"latest-handshakes": "peer-key\t0",
 	}
 	if err := parseTelemetry(values, &status); err != nil {
