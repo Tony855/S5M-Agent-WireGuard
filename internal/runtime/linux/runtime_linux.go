@@ -63,7 +63,7 @@ func (r *Runtime) Probe(context.Context) wr.Capabilities {
 		return caps
 	}
 	caps.Available = true
-	caps.Features = []string{"kernel-wireguard", "ipv4", "ipv6", "peer-handshake-status", "transfer-counters"}
+	caps.Features = []string{"kernel-wireguard", "ipv4", "ipv6"}
 	return caps
 }
 
