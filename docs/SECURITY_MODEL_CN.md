@@ -1,0 +1,21 @@
+# 安全模型与威胁边界
+
+## 资产
+- WireGuard private key、peer PSK、Agent token、RouterOS API 凭据。
+- WireGuard interface、peer、AllowedIPs、路由和防火墙相关状态。
+- Master WebSocket 会话、命令队列、配置 revision 和设备身份。
+
+## 强制约束
+1. 配置只允许引用 data directory 内的密钥文件；拒绝绝对路径、路径穿越和逃逸到数据目录外的符号链接。
+2. 密钥文件创建时使用 0600，父目录使用 0700；启动时校验属主/权限，发现权限过宽则拒绝读取并给出不含密钥的错误。
+3. 日志字段采用 allowlist；禁止 dump YAML、环境变量、RouterOS API 原始响应和完整命令参数。
+4. Agent token 与 RouterOS API 密码不得作为命令行参数；使用受限权限文件或 secret provider。
+5. 所有 API 操作使用 TLS；RouterOS API TLS 必须验证证书，禁止默认跳过证书验证。
+6. 不接受任意 shell、脚本、RouterOS CLI 或用户提供的二进制命令。
+7. 所有控制命令必须绑定 instance ID、command ID、deadline、期望配置 revision；重复请求返回已存结果，不重复执行。
+8. 路由变更必须先检查管理路径和 AllowedIPs 冲突；未经显式批准不得安装默认路由。
+9. 配置应用采用 prepare -> apply -> verify -> commit；失败恢复前一份配置与运行态。
+10. 遥测不包含 private key、PSK、Token、RouterOS 凭据或完整配置内容。
+
+## 目前实现与待实现
+当前配置模型已实现严格 YAML 字段解析、密钥路径词法/符号链接边界、Key 格式、重复 Peer key 和 AllowedIPs 重叠校验。密钥文件权限/属主校验、密钥生成与轮换、命令授权/审计、路由保护、运行时回滚仍属于后续开发任务，不能视为已完成。
