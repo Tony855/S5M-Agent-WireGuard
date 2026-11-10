@@ -55,8 +55,9 @@ func keygen(args []string) {
 func validate(args []string) {
 	fs := flag.NewFlagSet("config-validate", flag.ExitOnError)
 	path := fs.String("config", "/data/config.yaml", "path to WireGuard YAML config")
+	dataDir := fs.String("data-dir", "/data", "persistent data directory for WireGuard secrets")
 	_ = fs.Parse(args)
-	cfg, err := config.Load(*path)
+	cfg, err := config.LoadWithDataDir(*path, *dataDir)
 	if err != nil {
 		fatal(err)
 	}
@@ -72,7 +73,7 @@ func apply(args []string) {
 	dataDir := fs.String("data-dir", "/data", "persistent data directory")
 	path := fs.String("config", "/data/config.yaml", "path to WireGuard YAML config")
 	_ = fs.Parse(args)
-	cfg, err := config.Load(*path)
+	cfg, err := config.LoadWithDataDir(*path, *dataDir)
 	if err != nil {
 		fatal(err)
 	}
