@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -38,8 +39,20 @@ type Peer struct {
 	PersistentKeepalive int      `yaml:"persistentKeepalive,omitempty"`
 }
 
+const maxConfigSize = 1 << 20
+
 func Load(path string) (Config, error) {
 	var cfg Config
+	info, err := os.Stat(path)
+	if err != nil {
+		return cfg, fmt.Errorf("inspect config: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return cfg, errors.New("config path must be a regular file")
+	}
+	if info.Size() > maxConfigSize {
+		return cfg, fmt.Errorf("config exceeds maximum size of %d bytes", maxConfigSize)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return cfg, fmt.Errorf("read config: %w", err)
@@ -48,6 +61,13 @@ func Load(path string) (Config, error) {
 	dec.KnownFields(true)
 	if err := dec.Decode(&cfg); err != nil {
 		return cfg, fmt.Errorf("parse config: %w", err)
+	}
+	var trailing any
+	if err := dec.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return cfg, errors.New("multiple YAML documents are not supported")
+		}
+		return cfg, fmt.Errorf("parse trailing config: %w", err)
 	}
 	if err := cfg.Validate(filepath.Dir(path)); err != nil {
 		return cfg, err
