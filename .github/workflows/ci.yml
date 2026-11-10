@@ -26,4 +26,11 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Format
-        run: test -z "$(gofmt -l .)"
+        run: |
+          files="$(gofmt -l .)"
+          if [ -n "$files" ]; then
+            while IFS= read -r file; do
+              echo "::error file=$file,title=Go formatting::Run gofmt -w $file"
+            done <<< "$files"
+            exit 1
+          fi
