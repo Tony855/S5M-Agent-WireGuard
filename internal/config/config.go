@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"runtime"
 
 	"gopkg.in/yaml.v3"
 )
@@ -91,7 +92,30 @@ func safeDataFile(dataDir, name string) bool {
 	root, err := filepath.Abs(dataDir); if err != nil { return false }
 	target, err := filepath.Abs(filepath.Join(root, name)); if err != nil { return false }
 	rel, err := filepath.Rel(root, target)
-	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { return false }
+
+	// Lexical containment is not enough: an existing symlink (or symlinked
+	// parent directory) could redirect a secret outside the persistent data
+	// directory. Resolve the nearest existing ancestor before accepting it.
+	probe := target
+	for {
+		resolved, evalErr := filepath.EvalSymlinks(probe)
+		if evalErr == nil {
+			resolvedRoot, rootErr := filepath.EvalSymlinks(root)
+			if rootErr != nil { resolvedRoot = root }
+			resolvedRel, relErr := filepath.Rel(resolvedRoot, resolved)
+			return relErr == nil && resolvedRel != ".." && !strings.HasPrefix(resolvedRel, ".."+string(filepath.Separator))
+		}
+		if !os.IsNotExist(evalErr) { return false }
+		parent := filepath.Dir(probe)
+		if parent == probe { return false }
+		probe = parent
+	}
+}
+
+// Keep this import referenced on all supported platforms; runtime-specific
+// file permission checks are applied by the secret loader, not config parser.
+var _ = runtime.GOOS
 }
 
 func validInterfaceName(name string) bool {
