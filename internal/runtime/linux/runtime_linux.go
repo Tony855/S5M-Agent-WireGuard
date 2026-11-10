@@ -35,7 +35,10 @@ func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("%s failed: %w: %s", name, err, strings.TrimSpace(stderr.String()))
+		// stderr from wg may echo the rejected configuration line, including private keys.
+		// Keep command failures useful without leaking command output into logs or RPC errors.
+		_ = stderr
+		return nil, fmt.Errorf("%s failed: %w", name, err)
 	}
 	return out, nil
 }
@@ -176,7 +179,31 @@ func (r *Runtime) buildWGConfig(cfg config.Config) (string, func(), error) {
 		return "", func() {}, fmt.Errorf("create temporary config: %w", err)
 	}
 	path := file.Name()
-	cleanup := func() { _ = os.Remove(path) }
+	cleanup := func() {
+		// Best-effort overwrite before unlinking: unlink alone leaves file contents recoverable
+		// on some filesystems. This is defense in depth, not a guarantee on SSD/COW storage.
+		if info, statErr := os.Stat(path); statErr == nil && info.Size() > 0 {
+			if wipeFile, openErr := os.OpenFile(path, os.O_WRONLY, 0); openErr == nil {
+				zeroes := make([]byte, 32*1024)
+				remaining := info.Size()
+				for remaining > 0 {
+					chunk := int64(len(zeroes))
+					if remaining < chunk {
+						chunk = remaining
+					}
+					n, writeErr := wipeFile.Write(zeroes[:chunk])
+					if writeErr != nil || n == 0 {
+						break
+					}
+					remaining -= int64(n)
+				}
+				_ = wipeFile.Sync()
+				_ = wipeFile.Close()
+				wipe(zeroes)
+			}
+		}
+		_ = os.Remove(path)
+	}
 	if err := file.Chmod(0600); err != nil {
 		_ = file.Close()
 		cleanup()
