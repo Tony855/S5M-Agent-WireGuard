@@ -42,8 +42,19 @@ type Peer struct {
 const maxConfigSize = 1 << 20
 
 func Load(path string) (Config, error) {
+	return LoadWithDataDir(path, filepath.Dir(path))
+}
+
+// LoadWithDataDir validates all secret paths relative to the persistent data directory,
+// not relative to the location of the YAML file.
+func LoadWithDataDir(path, dataDir string) (Config, error) {
 	var cfg Config
-	info, err := os.Stat(path)
+	file, err := os.Open(path)
+	if err != nil {
+		return cfg, fmt.Errorf("open config: %w", err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
 	if err != nil {
 		return cfg, fmt.Errorf("inspect config: %w", err)
 	}
@@ -53,9 +64,12 @@ func Load(path string) (Config, error) {
 	if info.Size() > maxConfigSize {
 		return cfg, fmt.Errorf("config exceeds maximum size of %d bytes", maxConfigSize)
 	}
-	data, err := os.ReadFile(path)
+	data, err := io.ReadAll(io.LimitReader(file, maxConfigSize+1))
 	if err != nil {
 		return cfg, fmt.Errorf("read config: %w", err)
+	}
+	if len(data) > maxConfigSize {
+		return cfg, fmt.Errorf("config exceeds maximum size of %d bytes", maxConfigSize)
 	}
 	dec := yaml.NewDecoder(strings.NewReader(string(data)))
 	dec.KnownFields(true)
@@ -69,7 +83,7 @@ func Load(path string) (Config, error) {
 		}
 		return cfg, fmt.Errorf("parse trailing config: %w", err)
 	}
-	if err := cfg.Validate(filepath.Dir(path)); err != nil {
+	if err := cfg.Validate(dataDir); err != nil {
 		return cfg, err
 	}
 	return cfg, nil
