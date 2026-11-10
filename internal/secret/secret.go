@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 var ErrUnsafePermissions = errors.New("secret file permissions must not grant group or other access")
@@ -62,11 +63,17 @@ func ReadKey(dataDir, relativePath string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	info, err := os.Lstat(path)
+	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, fmt.Errorf("open secret file safely: %w", err)
+	}
+	file := os.NewFile(uintptr(fd), path)
+	defer file.Close()
+	info, err := file.Stat()
 	if err != nil {
 		return nil, fmt.Errorf("inspect secret file: %w", err)
 	}
-	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+	if !info.Mode().IsRegular() {
 		return nil, errors.New("secret path must be a regular non-symlink file")
 	}
 	if info.Mode().Perm()&0077 != 0 {
@@ -75,7 +82,7 @@ func ReadKey(dataDir, relativePath string) ([]byte, error) {
 	if info.Size() > 128 {
 		return nil, errors.New("secret file has an invalid size")
 	}
-	encoded, err := os.ReadFile(path)
+	encoded, err := io.ReadAll(io.LimitReader(file, 129))
 	if err != nil {
 		return nil, fmt.Errorf("read secret file: %w", err)
 	}
@@ -83,6 +90,7 @@ func ReadKey(dataDir, relativePath string) ([]byte, error) {
 	raw := make([]byte, base64.StdEncoding.DecodedLen(len(trimmed)))
 	n, err := base64.StdEncoding.Decode(raw, trimmed)
 	if err != nil || n != 32 {
+		wipe(raw)
 		return nil, errors.New("secret file must contain a base64-encoded 32-byte key")
 	}
 	return raw[:n], nil
