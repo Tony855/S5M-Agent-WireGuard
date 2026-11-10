@@ -48,8 +48,8 @@ func TestBuildWireGuardStatusReportsRuntimeWithoutSecrets(t *testing.T) {
 	if status["rx_bytes"] != float64(100) || status["tx_bytes"] != float64(200) {
 		t.Fatalf("unexpected transfer counters: %#v", status)
 	}
-	if status["config_sha256"] == "" || status["desired_revision"] != status["applied_revision"] {
-		t.Fatalf("config revision/hash not reported: %#v", status)
+	if status["config_sha256"] == "" || status["desired_revision"] == "" || status["applied_revision"] != "" {
+		t.Fatalf("desired config hash must be reported without claiming an unjournaled apply: %#v", status)
 	}
 	if _, exists := status["private_key"]; exists {
 		t.Fatal("private key must never be included in telemetry")
