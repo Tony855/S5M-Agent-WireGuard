@@ -56,7 +56,7 @@ func (r *Runtime) runner() Runner {
 	return execRunner{}
 }
 
-func (r *Runtime) Probe(context.Context) wr.Capabilities {
+func (r *Runtime) Probe(ctx context.Context) wr.Capabilities {
 	caps := wr.Capabilities{Backend: "linux-kernel", SupportsClient: true, SupportsServer: true}
 	if _, err := r.runner().LookPath("ip"); err != nil {
 		caps.Reason = "iproute2 ip binary is unavailable"
@@ -64,6 +64,13 @@ func (r *Runtime) Probe(context.Context) wr.Capabilities {
 	}
 	if _, err := r.runner().LookPath("wg"); err != nil {
 		caps.Reason = "wireguard-tools wg binary is unavailable"
+		return caps
+	}
+	// Binary presence alone does not prove that the running kernel exposes the
+	// WireGuard generic-netlink API (for example, a container may lack the
+	// host kernel module or the host may not support WireGuard).
+	if _, err := r.runner().Run(ctx, "wg", "show", "interfaces"); err != nil {
+		caps.Reason = "kernel WireGuard generic-netlink API is unavailable"
 		return caps
 	}
 	caps.Available = true
@@ -78,15 +85,15 @@ func (r *Runtime) Apply(ctx context.Context, cfg config.Config) error {
 	if err := cfg.Validate(r.DataDir); err != nil {
 		return fmt.Errorf("validate config: %w", err)
 	}
-	if !r.Probe(ctx).Available {
-		return errors.New("Linux WireGuard runtime prerequisites are unavailable")
-	}
 	for _, peer := range cfg.Peers {
 		for _, cidr := range peer.AllowedIPs {
 			if cidr == "0.0.0.0/0" || cidr == "::/0" {
 				return errors.New("default-route AllowedIPs are blocked until explicit route policy is implemented")
 			}
 		}
+	}
+	if !r.Probe(ctx).Available {
+		return errors.New("Linux WireGuard runtime prerequisites are unavailable")
 	}
 
 	run := r.runner()
