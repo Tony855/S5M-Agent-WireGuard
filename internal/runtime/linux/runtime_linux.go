@@ -235,15 +235,21 @@ func (r *Runtime) Status(ctx context.Context, name string) (wr.Status, error) {
 	if err != nil {
 		return status, nil
 	}
-	dump, err := r.runner().Run(ctx, "wg", "show", name, "dump")
-	if err != nil {
-		status.LastError = "interface exists but is not confirmed as a WireGuard interface"
-		return status, nil
+	run := r.runner()
+	fields := []string{"listen-port", "peers", "endpoints", "allowed-ips", "latest-handshakes", "transfer", "persistent-keepalive"}
+	telemetry := make(map[string]string, len(fields))
+	for _, field := range fields {
+		output, showErr := run.Run(ctx, "wg", "show", name, field)
+		if showErr != nil {
+			status.LastError = "interface exists but is not confirmed as a WireGuard interface or telemetry is unavailable"
+			return status, nil
+		}
+		telemetry[field] = string(output)
 	}
 	status.Running = linkIsUp(string(link))
-	if err := parseDump(string(dump), &status); err != nil {
-		status.LastError = "WireGuard status output was malformed"
-		return status, fmt.Errorf("parse WireGuard status: %w", err)
+	if err := parseTelemetry(telemetry, &status); err != nil {
+		status.LastError = "WireGuard telemetry output was malformed"
+		return status, fmt.Errorf("parse WireGuard telemetry: %w", err)
 	}
 	return status, nil
 }
@@ -262,58 +268,88 @@ func linkIsUp(output string) bool {
 	return false
 }
 
-func parseDump(output string, status *wr.Status) error {
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
-		return errors.New("empty wg dump")
-	}
-	iface := strings.Fields(lines[0])
-	if len(iface) != 4 {
-		return fmt.Errorf("interface row has %d fields; want 4", len(iface))
-	}
-	port, err := strconv.Atoi(iface[2])
+func parseTelemetry(values map[string]string, status *wr.Status) error {
+	port, err := strconv.Atoi(strings.TrimSpace(values["listen-port"]))
 	if err != nil || port < 0 || port > 65535 {
-		return errors.New("invalid listen port in wg dump")
+		return errors.New("invalid listen port")
 	}
 	status.ListenPort = port
-	for i, line := range lines[1:] {
-		fields := strings.Fields(line)
-		if len(fields) != 8 {
-			return fmt.Errorf("peer row %d has %d fields; want 8", i, len(fields))
+	endpoints, err := parsePairs(values["endpoints"])
+	if err != nil {
+		return fmt.Errorf("parse endpoints: %w", err)
+	}
+	allowedIPs, err := parsePairs(values["allowed-ips"])
+	if err != nil {
+		return fmt.Errorf("parse allowed IPs: %w", err)
+	}
+	handshakes, err := parsePairs(values["latest-handshakes"])
+	if err != nil {
+		return fmt.Errorf("parse handshakes: %w", err)
+	}
+	transfers, err := parsePairs(values["transfer"])
+	if err != nil {
+		return fmt.Errorf("parse transfer counters: %w", err)
+	}
+	keepalives, err := parsePairs(values["persistent-keepalive"])
+	if err != nil {
+		return fmt.Errorf("parse keepalive values: %w", err)
+	}
+	for _, key := range strings.Fields(values["peers"]) {
+		peer := wr.PeerStatus{PublicKey: key}
+		if endpoint := endpoints[key]; endpoint != "" && endpoint != "(none)" {
+			peer.Endpoint = endpoint
 		}
-		receive, err := strconv.ParseUint(fields[5], 10, 64)
-		if err != nil {
-			return fmt.Errorf("peer row %d has invalid receive counter", i)
+		if cidrs := allowedIPs[key]; cidrs != "" && cidrs != "(none)" {
+			peer.AllowedIPs = strings.Split(cidrs, ",")
 		}
-		transmit, err := strconv.ParseUint(fields[6], 10, 64)
-		if err != nil {
-			return fmt.Errorf("peer row %d has invalid transmit counter", i)
+		if raw := handshakes[key]; raw != "" {
+			seconds, parseErr := strconv.ParseInt(raw, 10, 64)
+			if parseErr != nil || seconds < 0 {
+				return fmt.Errorf("invalid handshake timestamp for peer %s", key)
+			}
+			if seconds > 0 {
+				t := time.Unix(seconds, 0).UTC()
+				peer.LastHandshake = &t
+			}
 		}
-		keepalive, err := strconv.Atoi(fields[7])
-		if err != nil || keepalive < 0 || keepalive > 65535 {
-			return fmt.Errorf("peer row %d has invalid keepalive", i)
+		if raw := transfers[key]; raw != "" {
+			counters := strings.Fields(raw)
+			if len(counters) != 2 {
+				return fmt.Errorf("invalid transfer counters for peer %s", key)
+			}
+			peer.ReceiveBytes, err = strconv.ParseUint(counters[0], 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid receive counter for peer %s", key)
+			}
+			peer.TransmitBytes, err = strconv.ParseUint(counters[1], 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid transmit counter for peer %s", key)
+			}
 		}
-		peer := wr.PeerStatus{
-			PublicKey: fields[0], ReceiveBytes: receive, TransmitBytes: transmit,
-			PersistentKeepalive: keepalive,
-		}
-		if fields[2] != "(none)" {
-			peer.Endpoint = fields[2]
-		}
-		if fields[3] != "(none)" {
-			peer.AllowedIPs = strings.Split(fields[3], ",")
-		}
-		handshake, err := strconv.ParseInt(fields[4], 10, 64)
-		if err != nil || handshake < 0 {
-			return fmt.Errorf("peer row %d has invalid handshake timestamp", i)
-		}
-		if handshake > 0 {
-			t := time.Unix(handshake, 0).UTC()
-			peer.LastHandshake = &t
+		if raw := keepalives[key]; raw != "" && raw != "off" {
+			peer.PersistentKeepalive, err = strconv.Atoi(raw)
+			if err != nil || peer.PersistentKeepalive < 0 || peer.PersistentKeepalive > 65535 {
+				return fmt.Errorf("invalid keepalive for peer %s", key)
+			}
 		}
 		status.Peers = append(status.Peers, peer)
 	}
 	return nil
+}
+
+func parsePairs(output string) (map[string]string, error) {
+	result := make(map[string]string)
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			return nil, errors.New("expected key and value")
+		}
+		result[fields[0]] = strings.Join(fields[1:], " ")
+	}
+	return result, nil
 }
 
 func (r *Runtime) Stop(ctx context.Context, name string) error {
