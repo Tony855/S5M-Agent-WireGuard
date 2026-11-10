@@ -134,7 +134,8 @@ func (r *Runtime) buildWGConfig(cfg config.Config) (string, func(), error) {
 	}
 	defer wipe(key)
 
-	var b strings.Builder
+	var b bytes.Buffer
+	defer wipe(b.Bytes())
 	b.WriteString("private_key = ")
 	b.WriteString(base64.StdEncoding.EncodeToString(key))
 	b.WriteByte('\n')
@@ -207,7 +208,7 @@ func (r *Runtime) buildWGConfig(cfg config.Config) (string, func(), error) {
 		cleanup()
 		return "", func() {}, err
 	}
-	if _, err := file.WriteString(b.String()); err != nil {
+	if _, err := file.Write(b.Bytes()); err != nil {
 		_ = file.Close()
 		cleanup()
 		return "", func() {}, err
