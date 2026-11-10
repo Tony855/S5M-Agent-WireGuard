@@ -297,3 +297,31 @@ func TestStopRemovesManagedMarkerAfterDeletingInterface(t *testing.T) {
 		t.Fatalf("managed marker should be removed after stop, stat error: %v", err)
 	}
 }
+
+func TestProbeRejectsMissingKernelWireGuardSupport(t *testing.T) {
+	_, fake, runtime := setup(t)
+	fake.fail = "wg show interfaces"
+
+	caps := runtime.Probe(context.Background())
+	if caps.Available {
+		t.Fatalf("kernel without WireGuard support reported available: %+v", caps)
+	}
+	if !strings.Contains(caps.Reason, "generic-netlink API") {
+		t.Fatalf("unexpected capability reason: %q", caps.Reason)
+	}
+	if len(fake.calls) != 1 || fake.calls[0] != "wg show interfaces" {
+		t.Fatalf("unexpected probe commands: %v", fake.calls)
+	}
+}
+
+func TestProbeConfirmsKernelWireGuardSupport(t *testing.T) {
+	_, fake, runtime := setup(t)
+
+	caps := runtime.Probe(context.Background())
+	if !caps.Available {
+		t.Fatalf("expected kernel WireGuard support, got: %+v", caps)
+	}
+	if len(fake.calls) != 1 || fake.calls[0] != "wg show interfaces" {
+		t.Fatalf("probe did not query the kernel API: %v", fake.calls)
+	}
+}
