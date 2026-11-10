@@ -91,6 +91,7 @@ func (s Settings) Validate() error {
 	}
 	return nil
 }
+
 func SaveSettings(path string, settings Settings) error {
 	if err := settings.Validate(); err != nil {
 		return err
