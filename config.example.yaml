@@ -1,0 +1,22 @@
+apiVersion: s5m.wireguard/v1alpha1
+
+interface:
+  name: wg0
+  role: server # client | server
+  backend: linux-kernel # linux-kernel | routeros-native | wireguard-go-experimental
+  privateKeyFile: secrets/server.key
+  addresses:
+    - 10.77.0.1/24
+    - fd77:77:77::1/64
+  listenPort: 51820
+  mtu: 1420
+
+peers:
+  - name: routeros-edge-01
+    # Public key only. Private keys are never accepted inline.
+    publicKey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    allowedIPs:
+      - 10.77.0.2/32
+      - fd77:77:77::2/128
+    # Server-side peers may omit endpoint; clients must set it.
+    persistentKeepalive: 25
