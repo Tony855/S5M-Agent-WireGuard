@@ -3,11 +3,12 @@
 package linux
 
 import (
-	"io"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
