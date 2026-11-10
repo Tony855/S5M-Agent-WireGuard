@@ -17,10 +17,10 @@ type fakeRuntime struct {
 	err    error
 }
 
-func (f fakeRuntime) Probe(context.Context) wr.Capabilities { return f.caps }
-func (f fakeRuntime) Apply(context.Context, config.Config) error { return nil }
+func (f fakeRuntime) Probe(context.Context) wr.Capabilities             { return f.caps }
+func (f fakeRuntime) Apply(context.Context, config.Config) error        { return nil }
 func (f fakeRuntime) Status(context.Context, string) (wr.Status, error) { return f.status, f.err }
-func (f fakeRuntime) Stop(context.Context, string) error { return nil }
+func (f fakeRuntime) Stop(context.Context, string) error                { return nil }
 
 func TestBuildWireGuardStatusReportsRuntimeWithoutSecrets(t *testing.T) {
 	dir := t.TempDir()
