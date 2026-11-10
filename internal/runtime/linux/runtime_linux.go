@@ -204,10 +204,11 @@ func (r *Runtime) Status(ctx context.Context, name string) (wr.Status, error) {
 		return wr.Status{}, errors.New("invalid interface name")
 	}
 	status := wr.Status{Interface: name, Backend: "linux-kernel"}
-	if _, err := r.runner().Run(ctx, "ip", "link", "show", "dev", name); err != nil {
+	link, err := r.runner().Run(ctx, "ip", "link", "show", "dev", name)
+	if err != nil {
 		return status, nil
 	}
-	status.Running = true
+	status.Running = linkIsUp(string(link))
 	dump, err := r.runner().Run(ctx, "wg", "show", name, "dump")
 	if err != nil {
 		status.LastError = "interface exists but WireGuard peer status could not be read"
@@ -218,6 +219,20 @@ func (r *Runtime) Status(ctx context.Context, name string) (wr.Status, error) {
 		return status, fmt.Errorf("parse WireGuard status: %w", err)
 	}
 	return status, nil
+}
+
+func linkIsUp(output string) bool {
+	start := strings.IndexByte(output, '<')
+	end := strings.IndexByte(output, '>')
+	if start < 0 || end <= start {
+		return false
+	}
+	for _, flag := range strings.Split(output[start+1:end], ",") {
+		if flag == "UP" {
+			return true
+		}
+	}
+	return false
 }
 
 func parseDump(output string, status *wr.Status) error {
