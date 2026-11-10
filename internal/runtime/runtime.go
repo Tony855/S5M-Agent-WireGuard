@@ -23,7 +23,7 @@ type PeerStatus struct {
 	LastHandshake        *time.Time `json:"lastHandshake,omitempty"`
 	ReceiveBytes         uint64     `json:"receiveBytes"`
 	TransmitBytes        uint64     `json:"transmitBytes"`
-	PersistentKeepalive  int        `json:"persistentKeepalive,omitempty"`
+	PersistentKeepalive int        `json:"persistentKeepalive,omitempty"`
 }
 
 type Status struct {
