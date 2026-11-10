@@ -127,7 +127,7 @@ func TestBuildWireGuardStatusReportsOnlyMatchingAppliedRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtime := fakeRuntime{
-		caps: wr.Capabilities{Backend: "linux-kernel", Available: true},
+		caps:   wr.Capabilities{Backend: "linux-kernel", Available: true},
 		status: wr.Status{Interface: "wg0", Backend: "linux-kernel", Running: true},
 	}
 	status := BuildWireGuardStatus(context.Background(), configPath, dir, "test-version", runtime)
