@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -57,21 +59,25 @@ func LoadSettings(path string) (Settings, error) {
 }
 
 func (s Settings) Validate() error {
-	u := strings.TrimSpace(s.ControllerURL)
-	if u == "" || strings.ContainsAny(u, "\r\n") {
+	controllerURL := strings.TrimSpace(s.ControllerURL)
+	if controllerURL == "" || strings.ContainsAny(controllerURL, "\\r\\n") {
 		return errors.New("controllerURL is required")
 	}
-	if !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
+	parsed, err := url.Parse(controllerURL)
+	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return errors.New("controllerURL is invalid")
+	}
+	if parsed.Scheme != "https" && parsed.Scheme != "http" {
 		return errors.New("controllerURL must use https (http is allowed only for loopback development)")
 	}
-	if strings.HasPrefix(u, "http://") {
-		host := strings.TrimPrefix(u, "http://")
-		host = strings.SplitN(host, "/", 2)[0]
-		if host != "localhost" && !strings.HasPrefix(host, "127.0.0.1:") && host != "127.0.0.1" && !strings.HasPrefix(host, "[::1]:") && host != "[::1]" {
+	if parsed.Scheme == "http" {
+		host := parsed.Hostname()
+		ip := net.ParseIP(host)
+		if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
 			return errors.New("plain HTTP controllerURL is allowed only for loopback development")
 		}
 	}
-	if !regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`).MatchString(strings.TrimSpace(s.MachineCode)) {
+	if !regexp.MustCompile("^[A-Za-z0-9_-]{1,64}$").MatchString(strings.TrimSpace(s.MachineCode)) {
 		return errors.New("machineCode format is invalid")
 	}
 	if len(s.Secret) > 256 || len(s.Token) > 4096 {
@@ -80,12 +86,11 @@ func (s Settings) Validate() error {
 	if strings.TrimSpace(s.Secret) == "" && strings.TrimSpace(s.Token) == "" {
 		return errors.New("either secret (first registration) or token is required")
 	}
-	if strings.ContainsAny(s.Secret+s.Token, "\r\n") {
+	if strings.ContainsAny(s.Secret+s.Token, "\\r\\n") {
 		return errors.New("Agent credentials must not contain newlines")
 	}
 	return nil
 }
-
 func SaveSettings(path string, settings Settings) error {
 	if err := settings.Validate(); err != nil {
 		return err
