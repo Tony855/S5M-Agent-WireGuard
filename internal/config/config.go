@@ -112,8 +112,6 @@ func safeDataFile(dataDir, name string) bool {
 	}
 }
 
-}
-
 func validInterfaceName(name string) bool {
 	if len(name) == 0 || len(name) > 15 || name == "." || name == ".." { return false }
 	for _, r := range name { if !(r == '-' || r == '_' || r == '.' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') { return false } }
