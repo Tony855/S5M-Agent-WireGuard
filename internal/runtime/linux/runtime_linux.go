@@ -85,15 +85,15 @@ func (r *Runtime) Apply(ctx context.Context, cfg config.Config) error {
 	if err := cfg.Validate(r.DataDir); err != nil {
 		return fmt.Errorf("validate config: %w", err)
 	}
-	if !r.Probe(ctx).Available {
-		return errors.New("Linux WireGuard runtime prerequisites are unavailable")
-	}
 	for _, peer := range cfg.Peers {
 		for _, cidr := range peer.AllowedIPs {
 			if cidr == "0.0.0.0/0" || cidr == "::/0" {
 				return errors.New("default-route AllowedIPs are blocked until explicit route policy is implemented")
 			}
 		}
+	}
+	if !r.Probe(ctx).Available {
+		return errors.New("Linux WireGuard runtime prerequisites are unavailable")
 	}
 
 	run := r.runner()
