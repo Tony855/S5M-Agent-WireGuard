@@ -16,8 +16,8 @@ import (
 )
 
 type fakeRunner struct {
-	calls  []string
-	fail   string
+	calls      []string
+	fail       string
 	output     []byte
 	linkOutput string
 }
