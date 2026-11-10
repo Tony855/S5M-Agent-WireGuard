@@ -82,11 +82,18 @@ func apply(args []string) {
 	if err != nil {
 		fatal(err)
 	}
+	revision, err := agent.ConfigRevision(cfg)
+	if err != nil {
+		fatal(err)
+	}
 	runtime := linux.New(*dataDir)
 	if err := runtime.Apply(context.Background(), cfg); err != nil {
 		fatal(err)
 	}
-	writeJSON(map[string]any{"applied": true, "interface": cfg.Interface.Name, "backend": "linux-kernel"})
+	if err := agent.RecordAppliedRevision(*dataDir, cfg.Interface.Name, revision); err != nil {
+		fatal(fmt.Errorf("WireGuard interface applied but revision journal could not be committed: %w", err))
+	}
+	writeJSON(map[string]any{"applied": true, "interface": cfg.Interface.Name, "backend": "linux-kernel", "revision": revision})
 }
 
 func status(args []string) {
@@ -108,6 +115,9 @@ func stop(args []string) {
 	_ = fs.Parse(args)
 	if err := linux.New(*dataDir).Stop(context.Background(), *name); err != nil {
 		fatal(err)
+	}
+	if err := agent.ClearAppliedRevision(*dataDir, *name); err != nil {
+		fatal(fmt.Errorf("WireGuard stopped but applied revision journal could not be cleared: %w", err))
 	}
 	writeJSON(map[string]any{"stopped": true, "interface": *name})
 }
