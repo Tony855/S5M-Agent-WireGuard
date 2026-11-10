@@ -50,7 +50,11 @@ func (c *Client) Run(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return nil
 		}
+		sessionStarted := time.Now()
 		err := c.runSession(ctx)
+		if time.Since(sessionStarted) >= 5*time.Minute {
+			backoff = time.Second
+		}
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -93,7 +97,7 @@ func (c *Client) register(ctx context.Context) error {
 	req.Header.Set("Content-Type", "application/json")
 	client := c.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
+		client = &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	}
 	resp, err := client.Do(req)
 	if err != nil {
