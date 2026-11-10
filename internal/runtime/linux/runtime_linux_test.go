@@ -157,3 +157,15 @@ func TestParseDumpLeavesNeverConnectedHandshakeUnset(t *testing.T) {
 		t.Fatalf("expected no handshake, got %v", status.Peers[0].LastHandshake)
 	}
 }
+
+func TestLinkIsUpUsesInterfaceFlags(t *testing.T) {
+	if !linkIsUp("7: wg0: <POINTOPOINT,NOARP,UP,LOWER_UP> mtu 1420") {
+		t.Fatal("expected interface with UP flag to be running")
+	}
+	if linkIsUp("7: wg0: <POINTOPOINT,NOARP> mtu 1420") {
+		t.Fatal("interface without UP flag must not be running")
+	}
+	if linkIsUp("malformed output") {
+		t.Fatal("malformed link output must not be treated as running")
+	}
+}
