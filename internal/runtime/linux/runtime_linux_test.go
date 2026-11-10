@@ -136,12 +136,12 @@ func TestStatusRejectsUnsafeName(t *testing.T) {
 func telemetryOutputs(name string) map[string][]byte {
 	key := "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 	return map[string][]byte{
-		"wg show " + name + " listen-port": []byte("51820\n"),
-		"wg show " + name + " peers": []byte(key + "\n"),
-		"wg show " + name + " endpoints": []byte(key + "\t198.51.100.10:51820\n"),
-		"wg show " + name + " allowed-ips": []byte(key + "\t10.77.0.2/32,fd77::2/128\n"),
-		"wg show " + name + " latest-handshakes": []byte(key + "\t1700000000\n"),
-		"wg show " + name + " transfer": []byte(key + "\t1234\t5678\n"),
+		"wg show " + name + " listen-port":          []byte("51820\n"),
+		"wg show " + name + " peers":                []byte(key + "\n"),
+		"wg show " + name + " endpoints":            []byte(key + "\t198.51.100.10:51820\n"),
+		"wg show " + name + " allowed-ips":          []byte(key + "\t10.77.0.2/32,fd77::2/128\n"),
+		"wg show " + name + " latest-handshakes":    []byte(key + "\t1700000000\n"),
+		"wg show " + name + " transfer":             []byte(key + "\t1234\t5678\n"),
 		"wg show " + name + " persistent-keepalive": []byte(key + "\t25\n"),
 	}
 }
@@ -149,12 +149,12 @@ func telemetryOutputs(name string) map[string][]byte {
 func TestParseTelemetryReturnsPeerStatsWithoutPrivateKeyDump(t *testing.T) {
 	status := wr.Status{}
 	values := map[string]string{
-		"listen-port": "51820",
-		"peers": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-		"endpoints": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t198.51.100.10:51820",
-		"allowed-ips": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t10.77.0.2/32,fd77::2/128",
-		"latest-handshakes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t1700000000",
-		"transfer": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t1234\t5678",
+		"listen-port":          "51820",
+		"peers":                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+		"endpoints":            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t198.51.100.10:51820",
+		"allowed-ips":          "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t10.77.0.2/32,fd77::2/128",
+		"latest-handshakes":    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t1700000000",
+		"transfer":             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t1234\t5678",
 		"persistent-keepalive": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t25",
 	}
 	if err := parseTelemetry(values, &status); err != nil {
