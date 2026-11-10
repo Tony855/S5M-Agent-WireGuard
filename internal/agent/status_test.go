@@ -3,8 +3,8 @@ package agent
 import (
 	"context"
 	"os"
-	"strings"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,7 +70,6 @@ func TestBuildWireGuardStatusRejectsUnsupportedBackend(t *testing.T) {
 		t.Fatalf("unsupported backend should be unavailable: %#v", status)
 	}
 }
-
 
 func TestAppliedRevisionJournalIsPrivateAndClearable(t *testing.T) {
 	dir := t.TempDir()
