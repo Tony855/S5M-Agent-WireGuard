@@ -101,13 +101,9 @@ func RecordAppliedRevision(dataDir, interfaceName, revision string) error {
 	if !validRevisionInterface(interfaceName) || !validSHA256(revision) {
 		return fmt.Errorf("invalid interface name or config revision")
 	}
-	dir := filepath.Join(dataDir, "runtime")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create runtime journal directory: %w", err)
-	}
-	info, err := os.Lstat(dir)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 {
-		return fmt.Errorf("runtime journal directory is unsafe")
+	dir, err := safeRevisionDirectory(dataDir, true)
+	if err != nil {
+		return err
 	}
 	tmp, err := os.CreateTemp(dir, ".applied-revision-*.tmp")
 	if err != nil {
@@ -119,7 +115,7 @@ func RecordAppliedRevision(dataDir, interfaceName, revision string) error {
 		_ = tmp.Close()
 		return err
 	}
-	if _, err := io.WriteString(tmp, revision+"\\n"); err != nil {
+	if _, err := io.WriteString(tmp, revision+"\n"); err != nil {
 		_ = tmp.Close()
 		return err
 	}
@@ -133,6 +129,10 @@ func RecordAppliedRevision(dataDir, interfaceName, revision string) error {
 	if err := os.Rename(tmpPath, filepath.Join(dir, interfaceName+".applied")); err != nil {
 		return fmt.Errorf("commit applied revision journal: %w", err)
 	}
+	if directory, err := os.Open(dir); err == nil {
+		_ = directory.Sync()
+		_ = directory.Close()
+	}
 	return nil
 }
 
@@ -140,7 +140,11 @@ func ReadAppliedRevision(dataDir, interfaceName string) (string, error) {
 	if !validRevisionInterface(interfaceName) {
 		return "", fmt.Errorf("invalid interface name")
 	}
-	path := filepath.Join(dataDir, "runtime", interfaceName+".applied")
+	dir, err := safeRevisionDirectory(dataDir, false)
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, interfaceName+".applied")
 	info, err := os.Lstat(path)
 	if err != nil {
 		return "", err
@@ -163,7 +167,11 @@ func ClearAppliedRevision(dataDir, interfaceName string) error {
 	if !validRevisionInterface(interfaceName) {
 		return fmt.Errorf("invalid interface name")
 	}
-	path := filepath.Join(dataDir, "runtime", interfaceName+".applied")
+	dir, err := safeRevisionDirectory(dataDir, false)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(dir, interfaceName+".applied")
 	info, err := os.Lstat(path)
 	if os.IsNotExist(err) {
 		return nil
@@ -174,9 +182,32 @@ func ClearAppliedRevision(dataDir, interfaceName string) error {
 	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 {
 		return fmt.Errorf("applied revision journal is unsafe")
 	}
-	return os.Remove(path)
+	if err := os.Remove(path); err != nil {
+		return err
+	}
+	if directory, err := os.Open(dir); err == nil {
+		_ = directory.Sync()
+		_ = directory.Close()
+	}
+	return nil
 }
 
+func safeRevisionDirectory(dataDir string, create bool) (string, error) {
+	dir := filepath.Join(dataDir, "runtime")
+	if create {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return "", fmt.Errorf("create runtime journal directory: %w", err)
+		}
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o077 != 0 {
+		return "", fmt.Errorf("runtime journal directory is unsafe")
+	}
+	return dir, nil
+}
 func validRevisionInterface(name string) bool {
 	return name != "." && name != ".." && regexp.MustCompile("^[A-Za-z0-9_.-]{1,15}$").MatchString(name)
 }
@@ -188,6 +219,7 @@ func validSHA256(value string) bool {
 	_, err := hex.DecodeString(value)
 	return err == nil
 }
+
 func boundedCounter(value uint64) float64 {
 	const maxExactInteger = uint64(9_000_000_000_000_000)
 	if value > maxExactInteger {
