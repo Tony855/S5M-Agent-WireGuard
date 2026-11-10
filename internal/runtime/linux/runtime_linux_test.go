@@ -9,13 +9,16 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/config"
+	wr "github.com/Tony855/S5M-Agent-WireGuard/internal/runtime"
 )
 
 type fakeRunner struct {
-	calls []string
-	fail  string
+	calls  []string
+	fail   string
+	output []byte
 }
 
 func (f *fakeRunner) LookPath(name string) (string, error) { return "/usr/bin/" + name, nil }
@@ -28,6 +31,9 @@ func (f *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte
 	}
 	if strings.Contains(call, "link show") {
 		return nil, errors.New("not found")
+	}
+	if name == "wg" && len(args) == 3 && args[2] == "dump" {
+		return f.output, nil
 	}
 	return nil, nil
 }
@@ -108,5 +114,46 @@ func TestStatusRejectsUnsafeName(t *testing.T) {
 	_, _, runtime := setup(t)
 	if _, err := runtime.Status(context.Background(), "wg0;reboot"); err == nil {
 		t.Fatal("expected invalid name")
+	}
+}
+
+func TestParseDumpReturnsPeerTelemetry(t *testing.T) {
+	status := wr.Status{}
+	dump := "private\tpublic\t51820\toff\n" +
+		"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t(none)\t198.51.100.10:51820\t10.77.0.2/32,fd77::2/128\t1700000000\t1234\t5678\t25\n"
+	if err := parseDump(dump, &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.ListenPort != 51820 || len(status.Peers) != 1 {
+		t.Fatalf("unexpected status: %+v", status)
+	}
+	peer := status.Peers[0]
+	if peer.Endpoint != "198.51.100.10:51820" || peer.ReceiveBytes != 1234 || peer.TransmitBytes != 5678 || peer.PersistentKeepalive != 25 {
+		t.Fatalf("unexpected peer telemetry: %+v", peer)
+	}
+	if peer.LastHandshake == nil || !peer.LastHandshake.Equal(time.Unix(1700000000, 0).UTC()) {
+		t.Fatalf("unexpected handshake time: %+v", peer.LastHandshake)
+	}
+	if strings.Join(peer.AllowedIPs, ",") != "10.77.0.2/32,fd77::2/128" {
+		t.Fatalf("unexpected AllowedIPs: %v", peer.AllowedIPs)
+	}
+}
+
+func TestParseDumpRejectsMalformedPeerRow(t *testing.T) {
+	status := wr.Status{}
+	if err := parseDump("private\tpublic\t51820\toff\nshort\trow\n", &status); err == nil {
+		t.Fatal("expected malformed dump error")
+	}
+}
+
+func TestParseDumpLeavesNeverConnectedHandshakeUnset(t *testing.T) {
+	status := wr.Status{}
+	dump := "private\tpublic\t0\toff\n" +
+		"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\t(none)\t(none)\t10.77.0.2/32\t0\t0\t0\t0\n"
+	if err := parseDump(dump, &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Peers[0].LastHandshake != nil {
+		t.Fatalf("expected no handshake, got %v", status.Peers[0].LastHandshake)
 	}
 }
