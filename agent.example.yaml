@@ -1,0 +1,7 @@
+# Copy to /data/agent.yaml and set permissions to 0600.
+# The dedicated token is issued by the existing S5M Master for this machine code.
+# After first successful registration, wg-agent stores the JWT in this file and
+# removes the one-time secret automatically.
+controllerURL: https://bind.v2net.cc
+machineCode: REPLACE_WITH_MACHINE_CODE
+secret: REPLACE_WITH_DEDICATED_AGENT_TOKEN
