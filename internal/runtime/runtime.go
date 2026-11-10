@@ -7,12 +7,12 @@ import (
 )
 
 type Capabilities struct {
-	Backend       string   `json:"backend"`
-	Available     bool     `json:"available"`
-	SupportsClient bool    `json:"supportsClient"`
-	SupportsServer bool    `json:"supportsServer"`
-	Features      []string `json:"features,omitempty"`
-	Reason        string   `json:"reason,omitempty"`
+	Backend        string   `json:"backend"`
+	Available      bool     `json:"available"`
+	SupportsClient bool     `json:"supportsClient"`
+	SupportsServer bool     `json:"supportsServer"`
+	Features       []string `json:"features,omitempty"`
+	Reason         string   `json:"reason,omitempty"`
 }
 
 type Status struct {
