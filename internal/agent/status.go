@@ -75,9 +75,6 @@ func BuildWireGuardStatus(ctx context.Context, configPath, dataDir, agentVersion
 	}
 	status["rx_bytes"] = boundedCounter(rx)
 	status["tx_bytes"] = boundedCounter(tx)
-	if result.Running {
-		status["applied_revision"] = hash
-	}
 	if strings.TrimSpace(result.LastError) != "" {
 		status["last_error"] = safeStatusText(result.LastError, 2048)
 	}
