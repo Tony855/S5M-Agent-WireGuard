@@ -116,3 +116,37 @@ func TestLoadRejectsUnknownFields(t *testing.T) {
 		t.Fatalf("expected unknown-field rejection, got %v", err)
 	}
 }
+
+func TestLoadWithDataDirRejectsSecretSymlinkEscapeOutsideConfigDirectory(t *testing.T) {
+	dataDir := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(dataDir, "secrets")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	configDir := t.TempDir()
+	path := filepath.Join(configDir, "config.yaml")
+	body := "apiVersion: s5m.wireguard/v1alpha1\n" +
+		"interface:\n  name: wg0\n  role: server\n  backend: linux-kernel\n  privateKeyFile: secrets/server.key\n" +
+		"peers:\n  - name: router\n    publicKey: " + testKey() + "\n    allowedIPs: [10.77.0.2/32]\n"
+	if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadWithDataDir(path, dataDir); err == nil || !strings.Contains(err.Error(), "relative file") {
+		t.Fatalf("expected data-directory symlink escape rejection, got %v", err)
+	}
+}
+
+func TestLoadWithDataDirAcceptsConfigOutsideDataDirectory(t *testing.T) {
+	dataDir := t.TempDir()
+	configDir := t.TempDir()
+	path := filepath.Join(configDir, "config.yaml")
+	body := "apiVersion: s5m.wireguard/v1alpha1\n" +
+		"interface:\n  name: wg0\n  role: server\n  backend: linux-kernel\n  privateKeyFile: secrets/server.key\n" +
+		"peers:\n  - name: router\n    publicKey: " + testKey() + "\n    allowedIPs: [10.77.0.2/32]\n"
+	if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadWithDataDir(path, dataDir); err != nil {
+		t.Fatalf("config outside data directory should be accepted: %v", err)
+	}
+}
