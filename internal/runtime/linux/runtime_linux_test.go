@@ -204,3 +204,29 @@ func TestStatusDoesNotTreatDownInterfaceAsRunning(t *testing.T) {
 		t.Fatalf("down interface reported running: %+v", status)
 	}
 }
+
+func TestStopRefusesNonWireGuardInterface(t *testing.T) {
+	_, fake, runtime := setup(t)
+	fake.fail = "wg show eth0"
+	if err := runtime.Stop(context.Background(), "eth0"); err == nil {
+		t.Fatal("expected refusal for non-WireGuard interface")
+	}
+	for _, call := range fake.calls {
+		if strings.Contains(call, "ip link delete") {
+			t.Fatalf("non-WireGuard interface was deleted: %v", fake.calls)
+		}
+	}
+}
+
+func TestStatusDoesNotMarkNonWireGuardInterfaceRunning(t *testing.T) {
+	_, fake, runtime := setup(t)
+	fake.linkOutput = "2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500"
+	fake.fail = "wg show eth0 dump"
+	status, err := runtime.Status(context.Background(), "eth0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Running || status.LastError == "" {
+		t.Fatalf("unverified interface reported as WireGuard: %+v", status)
+	}
+}
