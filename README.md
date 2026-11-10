@@ -2,6 +2,10 @@
 
 独立的 S5M WireGuard Agent 项目。该仓库与 [S5M-Agent-SmartDNS](https://github.com/Tony855/S5M-Agent-SmartDNS) 分开开发、构建、发布和回滚；不会把 WireGuard 功能塞进 Mihomo + Agent 镜像。
 
+## 共用主控面板
+
+WireGuard Agent 目标是接入现有 S5M Master，与 S5M-Agent-SmartDNS 共用同一主控面板；两个 Agent 实例、凭据、配置和命令队列仍相互隔离。当前 Master 还需先支持同一物理设备的多 Agent 实例及 WireGuard 专用状态模型。详见 [S5M 共用主控面板集成方案](docs/S5M_MASTER_INTEGRATION_CN.md)。
+
 ## 项目目标
 
 - 独立 WireGuard + Agent OCI 镜像，独立数据目录、配置版本、实例身份和升级生命周期。
