@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"path/filepath"
 	"strings"
 
@@ -70,8 +71,8 @@ func (c Config) Validate(dataDir string) error {
 	if c.Interface.Backend == "routeros-native" && c.Interface.Role != "server" && c.Interface.Role != "client" {
 		return errors.New("invalid RouterOS role")
 	}
-	if !safeDataFile(dataDir, c.Interface.PrivateKeyFile) {
-		return errors.New("interface.privateKeyFile must be a relative file inside the data directory")
+	if c.Interface.Backend != "routeros-native" && !safeDataFile(dataDir, c.Interface.PrivateKeyFile) {
+		return errors.New("interface.privateKeyFile must be a relative file inside the data directory for this backend")
 	}
 	if c.Interface.ListenPort < 0 || c.Interface.ListenPort > 65535 {
 		return errors.New("interface.listenPort must be between 0 and 65535")
@@ -107,8 +108,13 @@ func (c Config) Validate(dataDir string) error {
 			return fmt.Errorf("peers[%d].endpoint is required for client role", i)
 		}
 		if p.Endpoint != "" {
-			if _, _, err := net.SplitHostPort(p.Endpoint); err != nil {
+			_, port, err := net.SplitHostPort(p.Endpoint)
+			if err != nil {
 				return fmt.Errorf("peers[%d].endpoint must be host:port", i)
+			}
+			portNumber, err := strconv.Atoi(port)
+			if err != nil || portNumber < 1 || portNumber > 65535 {
+				return fmt.Errorf("peers[%d].endpoint port must be between 1 and 65535", i)
 			}
 		}
 		if len(p.AllowedIPs) == 0 {
