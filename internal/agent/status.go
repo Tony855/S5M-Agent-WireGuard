@@ -208,6 +208,7 @@ func safeRevisionDirectory(dataDir string, create bool) (string, error) {
 	}
 	return dir, nil
 }
+
 func validRevisionInterface(name string) bool {
 	return name != "." && name != ".." && regexp.MustCompile("^[A-Za-z0-9_.-]{1,15}$").MatchString(name)
 }
