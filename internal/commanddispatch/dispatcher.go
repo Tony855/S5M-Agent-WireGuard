@@ -249,17 +249,13 @@ func (d *Dispatcher) execute(ctx context.Context, cmd command, payload commandPa
 }
 
 func localFileHash(path string) (string, error) {
-	pathInfo, err := os.Lstat(path)
-	if err != nil || !pathInfo.Mode().IsRegular() || pathInfo.Mode()&os.ModeSymlink != 0 {
-		return "", errors.New("config path is not a regular non-symlink file")
-	}
-	file, err := os.Open(path)
+	file, err := config.OpenRegular(path)
 	if err != nil {
-		return "", err
+		return "", errors.New("config path is not a stable regular non-symlink file")
 	}
 	defer file.Close()
 	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Size() > (1<<20) {
+	if err != nil || info.Size() > (1<<20) {
 		return "", errors.New("config file is unsafe or oversized")
 	}
 	data, err := io.ReadAll(io.LimitReader(file, (1<<20)+1))
