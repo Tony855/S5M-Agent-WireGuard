@@ -98,14 +98,14 @@ func (c *Client) requestConfig(conn interface {
 		return err
 	}
 	requestID := fmt.Sprintf("wg-config-%d", time.Now().UnixNano())
-	if err := conn.WriteJSON(map[string]any{"type": "config.request", "id": requestID, "config_hash": localHash}); err != nil {
+	if err := conn.WriteJSON(map[string]any{"type": "config.request", "id": requestID, "config_sha256": localHash}); err != nil {
 		return fmt.Errorf("request WireGuard config: %w", err)
 	}
 	var response struct {
-		Type   string `json:"type"`
-		ID     string `json:"id"`
-		SHA256 string `json:"sha256"`
-		YAML   string `json:"yaml"`
+		Type    string `json:"type"`
+		ID      string `json:"id"`
+		SHA256  string `json:"sha256"`
+		YAML    string `json:"yaml"`
 		Message string `json:"message"`
 	}
 	if err := conn.ReadJSON(&response); err != nil {
