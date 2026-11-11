@@ -19,7 +19,7 @@ import (
 
 const (
 	maxControllerResponse = 16 << 10
-	maxAgentWSMessage     = (2 << 20) + (32 << 10)
+	maxAgentWSMessage     = (12 << 20) + (32 << 10)
 	maxAgentHeartbeat     = 16 << 10
 )
 
@@ -209,7 +209,7 @@ func (c *Client) runSession(ctx context.Context) error {
 		return err
 	}
 	if err := c.requestConfig(conn); err != nil {
-		return err
+		c.logf("WireGuard desired config sync rejected: %s", safeError(err))
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -222,7 +222,7 @@ func (c *Client) runSession(ctx context.Context) error {
 				return err
 			}
 			if err := c.requestConfig(conn); err != nil {
-				return err
+				c.logf("WireGuard desired config sync rejected: %s", safeError(err))
 			}
 		}
 	}
