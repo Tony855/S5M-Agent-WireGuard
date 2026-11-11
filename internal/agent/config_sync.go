@@ -58,7 +58,9 @@ func storeSyncedConfig(path, dataDir, yamlText, expectedSHA256 string) error {
 		return errors.New("controller WireGuard config SHA-256 mismatch")
 	}
 	target, err := secureConfigTarget(path, dataDir)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	dir := filepath.Dir(target)
 	file, err := os.CreateTemp(dir, ".wireguard-config-*.tmp")
 	if err != nil {
