@@ -311,6 +311,7 @@ func TestStatusDoesNotTreatDownInterfaceAsRunning(t *testing.T) {
 func TestStopRefusesNonWireGuardInterface(t *testing.T) {
 	_, fake, runtime := setup(t)
 	markManaged(t, runtime, "eth0")
+	fake.outputs = map[string][]byte{"wg show interfaces": []byte("eth0\n")}
 	fake.fail = "wg show eth0"
 	if err := runtime.Stop(context.Background(), "eth0"); err == nil {
 		t.Fatal("expected refusal for non-WireGuard interface")
@@ -372,6 +373,7 @@ func TestStopFailsClosedWhenWireGuardInventoryCannotBeRead(t *testing.T) {
 func TestStopRemovesManagedMarkerAfterDeletingInterface(t *testing.T) {
 	dir, fake, runtime := setup(t)
 	markManaged(t, runtime, "wgtest")
+	fake.outputs = map[string][]byte{"wg show interfaces": []byte("wgtest\n")}
 	if err := runtime.Stop(context.Background(), "wgtest"); err != nil {
 		t.Fatal(err)
 	}
@@ -425,5 +427,34 @@ func TestApplyDoesNotDeleteInterfaceWhenAtomicCreateFails(t *testing.T) {
 		if strings.Contains(call, "ip link delete") {
 			t.Fatalf("failed create must never trigger interface deletion: %v", fake.calls)
 		}
+	}
+}
+
+func TestStopRecoversStaleMarkerAfterInterfaceWasAlreadyDeleted(t *testing.T) {
+	dir, fake, runtime := setup(t)
+	markManaged(t, runtime, "wgtest")
+	fake.outputs = map[string][]byte{"wg show interfaces": []byte("wg-other\n")}
+	if err := runtime.Stop(context.Background(), "wgtest"); err != nil {
+		t.Fatalf("stop should recover after the interface was already deleted: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "runtime", "wgtest.managed")); !os.IsNotExist(err) {
+		t.Fatalf("stale ownership marker remains: %v", err)
+	}
+	for _, call := range fake.calls {
+		if strings.Contains(call, "ip link delete") || call == "wg show wgtest" {
+			t.Fatalf("already absent interface must not be deleted or queried by name: %v", fake.calls)
+		}
+	}
+}
+
+func TestStopDoesNotRemoveMarkerWhenInventoryCannotBeRead(t *testing.T) {
+	dir, fake, runtime := setup(t)
+	markManaged(t, runtime, "wgtest")
+	fake.fail = "wg show interfaces"
+	if err := runtime.Stop(context.Background(), "wgtest"); err == nil {
+		t.Fatal("expected inventory error")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "runtime", "wgtest.managed")); err != nil {
+		t.Fatalf("marker must be retained when inventory is unknown: %v", err)
 	}
 }

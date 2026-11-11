@@ -432,12 +432,31 @@ func (r *Runtime) Stop(ctx context.Context, name string) error {
 		}
 		return nil
 	}
-	if _, err := run.Run(ctx, "wg", "show", name); err != nil {
-		return errors.New("refusing to delete an interface that is not confirmed as WireGuard")
+	// Inspect the kernel's complete WireGuard inventory before acting. This
+	// distinguishes an already-deleted interface (for example, after the
+	// previous Stop lost its ACK) from an inventory/read failure.
+	interfaces, err := run.Run(ctx, "wg", "show", "interfaces")
+	if err != nil {
+		return errors.New("cannot confirm WireGuard interface inventory")
 	}
-	if _, err := run.Run(ctx, "ip", "link", "delete", "dev", name); err != nil {
-		return fmt.Errorf("delete WireGuard interface: %w", err)
+	present := false
+	for _, existing := range strings.Fields(string(interfaces)) {
+		if existing == name {
+			present = true
+			break
+		}
 	}
+	if present {
+		if _, err := run.Run(ctx, "wg", "show", name); err != nil {
+			return errors.New("refusing to delete an interface that is not confirmed as WireGuard")
+		}
+		if _, err := run.Run(ctx, "ip", "link", "delete", "dev", name); err != nil {
+			return fmt.Errorf("delete WireGuard interface: %w", err)
+		}
+	}
+	// Whether this call deleted the interface or is recovering after a prior
+	// successful delete, remove the stale ownership marker only after the
+	// kernel inventory confirms that the interface is absent.
 	if err := os.Remove(r.markerPath(name)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove managed interface marker: %w", err)
 	}
