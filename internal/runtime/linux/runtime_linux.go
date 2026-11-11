@@ -98,7 +98,7 @@ func (r *Runtime) Probe(ctx context.Context) wr.Capabilities {
 	return caps
 }
 
-func (r *Runtime) Apply(ctx context.Context, cfg config.Config) error {
+func (r *Runtime) Apply(ctx context.Context, cfg config.Config) (retErr error) {
 	if cfg.Interface.Backend != "linux-kernel" {
 		return errors.New("Linux runtime only accepts linux-kernel backend")
 	}
@@ -129,16 +129,25 @@ func (r *Runtime) Apply(ctx context.Context, cfg config.Config) error {
 	committed := false
 	markerCreated := false
 	defer func() {
-		if !committed {
-			if markerCreated {
-				_ = os.Remove(r.markerPath(cfg.Interface.Name))
+		if committed {
+			return
+		}
+		var cleanupErr error
+		if markerCreated {
+			if err := os.Remove(r.markerPath(cfg.Interface.Name)); err != nil && !os.IsNotExist(err) {
+				cleanupErr = fmt.Errorf("remove managed interface marker during rollback: %w", err)
 			}
-			// Rollback must survive cancellation of the command context, but it
-			// must never be an unbounded background operation. A stuck netlink
-			// helper must not pin the Agent command worker indefinitely.
-			rollbackCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_, _ = run.Run(rollbackCtx, "ip", "link", "delete", "dev", cfg.Interface.Name)
+		}
+		// Rollback must survive cancellation of the command context, but it
+		// must never be an unbounded background operation. A stuck netlink
+		// helper must not pin the Agent command worker indefinitely.
+		rollbackCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, err := run.Run(rollbackCtx, "ip", "link", "delete", "dev", cfg.Interface.Name); err != nil {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("delete newly created WireGuard interface during rollback: %w", err))
+		}
+		if cleanupErr != nil {
+			retErr = errors.Join(retErr, fmt.Errorf("rollback incomplete: %w", cleanupErr))
 		}
 	}()
 
