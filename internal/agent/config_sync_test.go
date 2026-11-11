@@ -174,7 +174,6 @@ func TestFileSHA256RejectsOversizedFileBeforeHashing(t *testing.T) {
 	}
 }
 
-
 func TestStoreSyncedConfigRejectsTargetOutsideDataDirectory(t *testing.T) {
 	dataDir := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "config.yaml")
