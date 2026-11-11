@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Tony855/S5M-Agent-WireGuard/internal/agent"
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/commandjournal"
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/config"
 	wr "github.com/Tony855/S5M-Agent-WireGuard/internal/runtime"
@@ -93,7 +94,7 @@ func setupDispatcher(t *testing.T, runtime wr.Runtime) (*Dispatcher, string, str
 
 func configRevision(cfg config.Config) (string, error) {
 	// Keep the test fixture aligned with the Agent's canonical revision function.
-	return configHashRevision(cfg)
+	return agent.ConfigRevision(cfg)
 }
 
 func makeCommand(t *testing.T, id, kind, revision, configSHA string, deadline time.Time) json.RawMessage {
