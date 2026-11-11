@@ -60,12 +60,29 @@ WireGuard 命令采用显式 allowlist（例如 apply、stop、status、peer rot
 
 1. **已完成**：Master 复合实例身份、独立 JWT、WebSocket 会话代际、状态/配置/命令队列隔离和旧 Mihomo Agent 兼容。
 2. **已完成**：WireGuard Agent 复合实例注册、WSS typed heartbeat/ACK、按实例请求配置、校验精确 SHA-256 和严格 YAML 后以 0600 原子保存；配置同步不会自动应用隧道。
-3. **待开发**：WireGuard typed command dispatcher、执行 journal、deadline/idempotency、配置 apply/stop 的安全 reconcile 与回滚；Master 目前仍拒绝 WireGuard 远程命令。
+3. **Agent typed command dispatcher / Journal：已实现首版并进入验证**：Agent 通过现有 WSS 发送 `command.request`，接收 `command.deliver`，只解析 `apply`、`stop`、`status` 三种固定类型，并通过 `command.ack` 回传结果；命令 envelope 严格拒绝未知字段，校验 ID、payload SHA-256、deadline、revision 和 apply 的 config SHA-256。Journal 持久化执行状态，重复命令不重复执行，进程重启后 `running` 变为 `interrupted` 且禁止自动重放。按接口串行化执行，避免同一接口的不同命令并发修改。**当前 Master 仍拒绝 WireGuard 远程命令**，因为 Linux Runtime 仍是新建接口式 Apply，尚未完成已有托管接口的安全 reconcile、配置快照/回滚与失败恢复；不得绕过 Master 门禁。
 4. **进行中**：RouterOS HTTPS REST 只读传输层基础；尚未接入 Runtime，也没有开放写操作。完整 RouterOS adapter 需要受控 reconcile、凭据/CA 管理和 host-side 状态标记。
 5. **待验收**：Linux/RouterOS 运行时集成、部署升级/回滚，以及 RouterOS 实机测试。
 
 ## 当前状态与验收门槛
 
-当前 WireGuard Agent 已实现实例注册、JWT 0600 保存、WSS typed heartbeat/ACK、断线指数退避，以及按实例拉取 desired YAML。配置下发时先验证 Master 提供的精确字节 SHA-256，再验证 `s5m.wireguard/v1alpha1` schema 和本地密钥文件路径，最后原子保存为 0600；私钥/PSK 内容不从 Master 下载，也不会因配置同步自动 apply。Master 的命令队列和 ACK 已按实例隔离，但 WireGuard 命令投递仍被拒绝，因为 Agent typed dispatcher 和 apply/stop 安全 reconcile 尚未完成。RouterOS 当前只有只读 HTTPS REST 传输基础，尚未集成 Runtime 或实机验证。
+当前 WireGuard Agent 已实现实例注册、JWT 0600 保存、WSS typed heartbeat/ACK、断线指数退避，以及按实例拉取 desired YAML。Agent 侧已加入首版类型化命令请求/ACK 通道与持久化 dispatcher：仅允许 `apply`、`stop`、`status`，不执行 shell/CLI；命令按 ID 去重、按接口串行化，并对中断记录禁止自动重放。配置下发时先验证 Master 提供的精确字节 SHA-256，再验证 `s5m.wireguard/v1alpha1` schema 和本地密钥文件路径，最后原子保存为 0600；私钥/PSK 内容不从 Master 下载，也不会因配置同步自动 apply。Master 的命令队列和 ACK 已按实例隔离，但 WireGuard 命令投递仍被拒绝：Agent dispatcher 虽已实现首版，Linux Runtime 的托管接口更新、快照/回滚和故障恢复仍未达到开放远程执行的安全门槛。Master 的 `validateAgentInstanceCommandPayload` 仅允许 Mihomo，WireGuard 的拒绝测试必须持续保留，直到后续 Runtime 与端到端验收完成。RouterOS 当前只有只读 HTTPS REST 传输基础，尚未集成 Runtime 或实机验证。
 
 Master/Agent 的实例隔离、WSS 心跳和配置同步已有 CI 回归；Master 还完成了 500 个并发实例的内存型 WebSocket 命令隔离测试（约 16 秒），但这不等同于 500 台真实设备的持续负载认证，也不覆盖 CPU/RAM、p95/p99、生产 SQLite 锁等待或重连风暴。RouterOS 写操作、实机兼容性和生产部署验收仍未完成。因此不得宣称 WireGuard 已具备完整生产级共用面板控制能力。
+
+
+## Agent typed command wire contract (首版，Master 暂不放行)
+
+Agent 在 WSS 心跳与配置同步后发送 `command.request`。Master 返回 `command.none`、`error` 或 `command.deliver`。命令对象仅允许以下字段：
+
+- `id`：稳定命令 ID。
+- `type`：仅 `apply`、`stop`、`status`。
+- `deadline`：RFC3339 截止时间，最多 24 小时。
+- `revision`：期望配置 revision（SHA-256）。
+- `payload_sha256`：payload 原始 JSON 字节 SHA-256。
+- `config_sha256`：apply 必填，指向本地已同步配置原始字节 SHA-256。
+- `payload`：首版仅允许 `{"interface":"wg0"}` 这种固定接口字段对象；不接受命令字符串、路径、二进制参数或自由选项。
+
+Agent 执行后先将结果写入本地 Journal，再发送 `command.ack`（`id`、`command_status`、`message`）。Master ACK 确认丢失时可重复投递；Agent 根据 Journal 返回原结果而不再次执行。进程在命令执行期间退出时，记录会被标记为 `interrupted`，必须人工/后续 reconcile，不会盲目重放。
+
+该协议目前仅完成 Agent 侧实现与测试。Master 的队列入队和投递门禁继续拒绝 `agent_type=wireguard`；此文档不代表远程 WireGuard 命令已启用。
