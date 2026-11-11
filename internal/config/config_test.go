@@ -151,7 +151,6 @@ func TestLoadWithDataDirAcceptsConfigOutsideDataDirectory(t *testing.T) {
 	}
 }
 
-
 func TestLoadRejectsConfigSymlink(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "real.yaml")
