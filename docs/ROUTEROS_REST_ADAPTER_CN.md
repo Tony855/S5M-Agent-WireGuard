@@ -13,6 +13,7 @@
 安全边界：
 - 只接受 HTTPS endpoint；拒绝 HTTP、URL userinfo、query、fragment 和非 `/rest` 路径。
 - 使用 HTTP Basic Auth，但禁止跟随重定向，避免把凭据转发到其他主机。
+- 强制 TLS 1.2 或更高版本，拒绝 `InsecureSkipVerify`、自定义 TLS 拨号器和无法检查 TLS 配置的非标准 RoundTripper；允许通过标准 Transport 配置受信任 CA。
 - 响应体上限 1 MiB；错误只报告 HTTP 状态，不回显 RouterOS 响应体。
 - 资源路径为固定 allowlist；本阶段没有 POST、PATCH、PUT、DELETE 或任意 CLI 能力。
 - 不把 RouterOS 用户名/密码放入 WireGuard telemetry、日志或 Master 配置。
