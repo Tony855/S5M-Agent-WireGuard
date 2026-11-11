@@ -136,15 +136,21 @@ func TestRequestConfigUsesMasterWSEnvelopeAndStoresConfig(t *testing.T) {
 	}
 	defer conn.Close()
 	client := &Client{ConfigPath: configPath, DataDir: dataDir}
-	if err := client.requestConfig(conn); err != nil { t.Fatal(err) }
+	if err := client.requestConfig(conn); err != nil {
+		t.Fatal(err)
+	}
 	select {
 	case err := <-serverErr:
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Master test server did not receive config request")
 	}
 	stored, err := os.ReadFile(configPath)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if string(stored) != validWireGuardYAML {
 		t.Fatal("WSS config payload was not stored exactly")
 	}
