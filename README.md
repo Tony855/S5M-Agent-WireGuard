@@ -36,7 +36,8 @@ WireGuard Agent 目标是接入现有 S5M Master，与 S5M-Agent-SmartDNS 共用
 - [x] Linux kernel WireGuard 首次创建流程、Peer/地址配置、状态探测、停止和新接口失败清理（不支持原地更新；默认路由拒绝）。
 - [x] Agent HTTP 初始注册、独立 JWT 安全保存、WebSocket typed heartbeat/ACK 和指数退避重连（首阶段仅状态上报）。
 - [ ] WireGuard 独立配置同步、命令投递和幂等 ACK。
-- [ ] RouterOS 原生 WireGuard API Adapter。
+- [x] RouterOS HTTPS REST 只读传输层（固定资源 allowlist、TLS/Basic Auth、重定向拦截、响应上限和错误脱敏）；尚未接入 Runtime 或开放写操作，详见 [RouterOS Adapter 阶段说明](docs/ROUTEROS_REST_ADAPTER_CN.md)。
+- [ ] RouterOS 原生 WireGuard Runtime、受控资源 reconcile 和回滚。
 - [ ] RouterOS Container 实机兼容性与多架构镜像。
 - [ ] 发布、升级和回滚流程。
 
