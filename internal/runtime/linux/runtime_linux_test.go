@@ -28,6 +28,9 @@ func (f *fakeRunner) LookPath(name string) (string, error) { return "/usr/bin/" 
 func (f *fakeRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	call := name + " " + strings.Join(args, " ")
 	f.calls = append(f.calls, call)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if call == "ip link delete dev wgtest" {
 		deadline, ok := ctx.Deadline()
 		f.rollbackBounded = ok && time.Until(deadline) > 0 && time.Until(deadline) <= 5*time.Second
