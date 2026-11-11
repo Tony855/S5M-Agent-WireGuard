@@ -144,19 +144,10 @@ func (r *Runtime) Apply(ctx context.Context, cfg config.Config) (retErr error) {
 		rollbackCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if _, err := run.Run(rollbackCtx, "ip", "link", "delete", "dev", cfg.Interface.Name); err != nil {
-			rollbackErr := fmt.Errorf("delete newly created WireGuard interface during rollback: %w", err)
-			if cleanupErr != nil {
-				retErr = fmt.Errorf("%w; %v", rollbackErr, cleanupErr)
-			} else {
-				cleanupErr = rollbackErr
-			}
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("delete newly created WireGuard interface during rollback: %w", err))
 		}
 		if cleanupErr != nil {
-			if retErr != nil {
-				retErr = fmt.Errorf("%w; rollback incomplete: %v", retErr, cleanupErr)
-			} else {
-				retErr = fmt.Errorf("rollback incomplete: %w", cleanupErr)
-			}
+			retErr = errors.Join(retErr, fmt.Errorf("rollback incomplete: %w", cleanupErr))
 		}
 	}()
 
