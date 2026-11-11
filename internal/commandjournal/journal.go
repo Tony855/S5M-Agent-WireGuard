@@ -151,7 +151,9 @@ func (j *Journal) Complete(id, payloadSHA256 string, succeeded bool, result stri
 		result = result[:512]
 	}
 	result = strings.Map(func(r rune) rune {
-		if r < 0x20 && r != '\t' { return -1 }
+		if r < 0x20 && r != '\t' {
+			return -1
+		}
 		return r
 	}, result)
 	previous := rec
@@ -180,15 +182,21 @@ func (j *Journal) List() []Record {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	ids := make([]string, 0, len(j.records))
-	for id := range j.records { ids = append(ids, id) }
+	for id := range j.records {
+		ids = append(ids, id)
+	}
 	sort.Strings(ids)
 	out := make([]Record, 0, len(ids))
-	for _, id := range ids { out = append(out, j.records[id]) }
+	for _, id := range ids {
+		out = append(out, j.records[id])
+	}
 	return out
 }
 
 func validateInput(r Record) error {
-	if !idPattern.MatchString(r.ID) { return errors.New("invalid command ID") }
+	if !idPattern.MatchString(r.ID) {
+		return errors.New("invalid command ID")
+	}
 	if r.Type != "apply" && r.Type != "stop" && r.Type != "status" {
 		return errors.New("unsupported WireGuard command type")
 	}
@@ -209,29 +217,45 @@ func validateInput(r Record) error {
 
 func (j *Journal) load() error {
 	pathInfo, pathErr := os.Lstat(j.path)
-	if errors.Is(pathErr, os.ErrNotExist) { return nil }
+	if errors.Is(pathErr, os.ErrNotExist) {
+		return nil
+	}
 	if pathErr != nil || pathInfo.Mode()&os.ModeSymlink != 0 || !pathInfo.Mode().IsRegular() {
 		return errors.New("command journal path is unsafe")
 	}
 	file, err := os.Open(j.path)
-	if err != nil { return errors.New("cannot open command journal") }
+	if err != nil {
+		return errors.New("cannot open command journal")
+	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > maxJournalBytes {
 		return errors.New("command journal file is unsafe or oversized")
 	}
 	data, err := io.ReadAll(io.LimitReader(file, maxJournalBytes+1))
-	if err != nil || len(data) > maxJournalBytes { return errors.New("cannot read command journal") }
+	if err != nil || len(data) > maxJournalBytes {
+		return errors.New("cannot read command journal")
+	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	var records []Record
-	if err := dec.Decode(&records); err != nil { return fmt.Errorf("decode command journal: %w", err) }
+	if err := dec.Decode(&records); err != nil {
+		return fmt.Errorf("decode command journal: %w", err)
+	}
 	var extra any
-	if err := dec.Decode(&extra); err != io.EOF { return errors.New("command journal has trailing data") }
-	if len(records) > maxRecords { return errors.New("command journal exceeds record limit") }
+	if err := dec.Decode(&extra); err != io.EOF {
+		return errors.New("command journal has trailing data")
+	}
+	if len(records) > maxRecords {
+		return errors.New("command journal exceeds record limit")
+	}
 	for _, rec := range records {
-		if err := validateStoredRecord(rec); err != nil { return err }
-		if _, exists := j.records[rec.ID]; exists { return errors.New("command journal contains duplicate IDs") }
+		if err := validateStoredRecord(rec); err != nil {
+			return err
+		}
+		if _, exists := j.records[rec.ID]; exists {
+			return errors.New("command journal contains duplicate IDs")
+		}
 		j.records[rec.ID] = rec
 	}
 	return nil
@@ -250,24 +274,49 @@ func validateStoredRecord(r Record) error {
 
 func (j *Journal) persist() error {
 	records := make([]Record, 0, len(j.records))
-	for _, rec := range j.records { records = append(records, rec) }
+	for _, rec := range j.records {
+		records = append(records, rec)
+	}
 	sort.Slice(records, func(a, b int) bool { return records[a].ID < records[b].ID })
 	data, err := json.Marshal(records)
-	if err != nil { return errors.New("encode command journal failed") }
-	if len(data) > maxJournalBytes { return errors.New("command journal exceeds size limit") }
+	if err != nil {
+		return errors.New("encode command journal failed")
+	}
+	if len(data) > maxJournalBytes {
+		return errors.New("command journal exceeds size limit")
+	}
 	tmp, err := os.CreateTemp(j.dir, ".commands-*.tmp")
-	if err != nil { return errors.New("create command journal temporary file failed") }
+	if err != nil {
+		return errors.New("create command journal temporary file failed")
+	}
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath)
-	if err := tmp.Chmod(0600); err != nil { _ = tmp.Close(); return err }
-	if _, err := tmp.Write(data); err != nil { _ = tmp.Close(); return errors.New("write command journal failed") }
-	if err := tmp.Sync(); err != nil { _ = tmp.Close(); return errors.New("sync command journal failed") }
-	if err := tmp.Close(); err != nil { return errors.New("close command journal failed") }
-	if err := os.Rename(tmpPath, j.path); err != nil { return errors.New("commit command journal failed") }
+	if err := tmp.Chmod(0600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return errors.New("write command journal failed")
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return errors.New("sync command journal failed")
+	}
+	if err := tmp.Close(); err != nil {
+		return errors.New("close command journal failed")
+	}
+	if err := os.Rename(tmpPath, j.path); err != nil {
+		return errors.New("commit command journal failed")
+	}
 	dir, err := os.Open(j.dir)
-	if err != nil { return errors.New("open command journal directory failed") }
+	if err != nil {
+		return errors.New("open command journal directory failed")
+	}
 	defer dir.Close()
-	if err := dir.Sync(); err != nil { return errors.New("sync command journal directory failed") }
+	if err := dir.Sync(); err != nil {
+		return errors.New("sync command journal directory failed")
+	}
 	return nil
 }
 
