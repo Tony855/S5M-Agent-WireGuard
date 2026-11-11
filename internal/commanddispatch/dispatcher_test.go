@@ -111,6 +111,24 @@ func makeCommand(t *testing.T, id, kind, revision, configSHA string, deadline ti
 	return raw
 }
 
+func TestNewRejectsConfigOutsideDataVolumeAndSymlink(t *testing.T) {
+	runtime := &fakeRuntime{}
+	dir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside.yaml")
+	if err := os.WriteFile(outside, []byte(dispatcherConfig), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(dir, outside, runtime); err == nil {
+		t.Fatal("config path outside data directory was accepted")
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "config.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(dir, filepath.Join(dir, "config.yaml"), runtime); err == nil {
+		t.Fatal("symlinked config target was accepted")
+	}
+}
+
 func TestApplyCommandIsJournaledAndDuplicateIsNotReexecuted(t *testing.T) {
 	runtime := &fakeRuntime{}
 	d, dir, revision := setupDispatcher(t, runtime)
