@@ -14,6 +14,7 @@ import (
 
 	"github.com/gorilla/websocket"
 )
+
 const validWireGuardYAML = `apiVersion: s5m.wireguard/v1alpha1
 interface:
   name: wg0
@@ -108,32 +109,43 @@ func TestRequestConfigUsesMasterWSEnvelopeAndStoresConfig(t *testing.T) {
 	serverErr := make(chan error, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := (&websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}).Upgrade(w, r, nil)
-		if err != nil { serverErr <- err; return }
+		if err != nil {
+			serverErr <- err
+			return
+		}
 		defer conn.Close()
 		var request map[string]any
-		if err := conn.ReadJSON(&request); err != nil { serverErr <- err; return }
+		if err := conn.ReadJSON(&request); err != nil {
+			serverErr <- err
+			return
+		}
 		if request["type"] != "config.request" || request["config_sha256"] != "" || request["config_hash"] != nil || request["id"] == "" {
 			serverErr <- fmt.Errorf("unexpected Master config request: %#v", request)
 			return
 		}
-		if err := conn.WriteJSON(map[string]any{"type":"config.sync","id":request["id"],"sha256":wantHash,"yaml":validWireGuardYAML}); err != nil {
-			serverErr <- err; return
+		if err := conn.WriteJSON(map[string]any{"type": "config.sync", "id": request["id"], "sha256": wantHash, "yaml": validWireGuardYAML}); err != nil {
+			serverErr <- err
+			return
 		}
 		serverErr <- nil
 	}))
 	defer server.Close()
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer conn.Close()
 	client := &Client{ConfigPath: configPath, DataDir: dataDir}
 	if err := client.requestConfig(conn); err != nil { t.Fatal(err) }
 	select {
 	case err := <-serverErr:
 		if err != nil { t.Fatal(err) }
-	case <-time.After(2*time.Second):
+	case <-time.After(2 * time.Second):
 		t.Fatal("Master test server did not receive config request")
 	}
 	stored, err := os.ReadFile(configPath)
 	if err != nil { t.Fatal(err) }
-	if string(stored) != validWireGuardYAML { t.Fatal("WSS config payload was not stored exactly") }
+	if string(stored) != validWireGuardYAML {
+		t.Fatal("WSS config payload was not stored exactly")
+	}
 }
