@@ -116,7 +116,12 @@ func (j *Journal) Begin(input Record) (Record, bool, error) {
 		return existing, false, nil
 	}
 	if len(j.records) >= maxRecords {
-		return Record{}, false, errors.New("command journal is full; terminal records must be compacted")
+		if err := j.compactExpiredTerminalRecords(time.Now().UTC()); err != nil {
+			return Record{}, false, fmt.Errorf("compact expired command records: %w", err)
+		}
+		if len(j.records) >= maxRecords {
+			return Record{}, false, errors.New("command journal is full; unexpired or running records cannot be discarded")
+		}
 	}
 	now := time.Now().UTC()
 	input.PayloadSHA256 = strings.ToLower(input.PayloadSHA256)
@@ -132,6 +137,31 @@ func (j *Journal) Begin(input Record) (Record, bool, error) {
 		return Record{}, false, err
 	}
 	return input, true, nil
+}
+
+// compactExpiredTerminalRecords removes only terminal records whose command
+// deadline has passed. A command that can still be delivered is retained, and
+// running records are never discarded because their side effects may be in flight.
+// The replacement is persisted before the in-memory map is changed.
+func (j *Journal) compactExpiredTerminalRecords(now time.Time) error {
+	compacted := make(map[string]Record, len(j.records))
+	for id, rec := range j.records {
+		terminal := rec.State == StateSucceeded || rec.State == StateFailed || rec.State == StateInterrupted
+		if terminal && !rec.Deadline.After(now) {
+			continue
+		}
+		compacted[id] = rec
+	}
+	if len(compacted) == len(j.records) {
+		return nil
+	}
+	previous := j.records
+	j.records = compacted
+	if err := j.persist(); err != nil {
+		j.records = previous
+		return err
+	}
+	return nil
 }
 
 func (j *Journal) Complete(id, payloadSHA256 string, succeeded bool, result string) (Record, error) {
