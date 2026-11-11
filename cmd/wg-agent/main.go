@@ -135,6 +135,7 @@ func agentRun(args []string) {
 	runtime := linux.New(*dataDir)
 	client := &agent.Client{
 		Settings: settings, SettingsPath: *settingsPath,
+		ConfigPath: *configPath, DataDir: *dataDir,
 		Status: func(ctx context.Context) (map[string]any, error) {
 			return agent.BuildWireGuardStatus(ctx, *configPath, *dataDir, version, runtime), nil
 		},
