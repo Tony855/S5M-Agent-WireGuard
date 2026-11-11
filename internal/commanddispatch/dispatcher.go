@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -46,11 +47,49 @@ func New(dataDir, configPath string, runtime wr.Runtime) (*Dispatcher, error) {
 	if strings.TrimSpace(dataDir) == "" || strings.TrimSpace(configPath) == "" || runtime == nil {
 		return nil, errors.New("command dispatcher requires data directory, config path, and runtime")
 	}
+	if err := validateConfigPath(dataDir, configPath); err != nil {
+		return nil, err
+	}
 	journal, err := commandjournal.Open(dataDir)
 	if err != nil {
 		return nil, fmt.Errorf("open command journal: %w", err)
 	}
 	return &Dispatcher{DataDir: dataDir, ConfigPath: configPath, Journal: journal, Runtime: runtime, locks: make(map[string]*sync.Mutex)}, nil
+}
+
+func validateConfigPath(dataDir, configPath string) error {
+	root, err := filepath.Abs(dataDir)
+	if err != nil {
+		return errors.New("Agent data directory is invalid")
+	}
+	root, err = filepath.EvalSymlinks(root)
+	if err != nil {
+		return errors.New("Agent data directory is unavailable")
+	}
+	target, err := filepath.Abs(configPath)
+	if err != nil {
+		return errors.New("WireGuard config path is invalid")
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return errors.New("WireGuard config path must remain inside Agent data directory")
+	}
+	current := root
+	parts := strings.Split(rel, string(filepath.Separator))
+	for i, part := range parts {
+		current = filepath.Join(current, part)
+		info, statErr := os.Lstat(current)
+		if errors.Is(statErr, os.ErrNotExist) && i == len(parts)-1 {
+			return nil
+		}
+		if statErr != nil || info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("WireGuard config path contains an unavailable or symlinked component")
+		}
+		if i < len(parts)-1 && !info.IsDir() {
+			return errors.New("WireGuard config parent is not a directory")
+		}
+	}
+	return nil
 }
 
 func (d *Dispatcher) commandLock(id string) *sync.Mutex {
@@ -226,6 +265,10 @@ func localFileHash(path string) (string, error) {
 
 func validCommandID(value string) bool {
 	if len(value) == 0 || len(value) > 128 {
+		return false
+	}
+	first := value[0]
+	if !(first >= 'a' && first <= 'z' || first >= 'A' && first <= 'Z' || first >= '0' && first <= '9') {
 		return false
 	}
 	for _, r := range value {
