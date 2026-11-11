@@ -10,14 +10,14 @@ WireGuard Agent 必须进入现有 S5M Master 主控面板，与 S5M-Agent-Smart
 
 当前 `S5M-Master/docs/AGENT_API_CONTRACT.md` 和 `source/internal/app/agent_websocket.go` 的实现提供：
 
-- `POST /api/v1/agent/register`：请求字段为 `machine_code`、`secret`，返回专属 Agent JWT。
+- `POST /api/v1/agent/register`：兼容旧 `machine_code`/`secret` 注册，也支持 `agent_type`/`instance_id` 复合实例注册并签发独立 JWT。
 - `GET /api/v1/agent/ws`：Agent 使用 `Authorization: Bearer <JWT>` 建立主动 WebSocket。
 - 欢迎消息：`welcome` / protocol 1 / heartbeat interval。
-- 当前 Agent 心跳校验器强制要求 Mihomo 字段（`mihomo_version`、`mihomo_healthy`、流量、连接数、`config_sha256`、`last_error`）。
-- 当前配置请求、配置下发和命令 ACK 均以单一 `machine_code` 作为状态/配置/命令存储键。
-- 当前连接注册表也以 `machine_code` 为 key；同一 machine code 的新连接会取代旧连接。
+- 心跳按身份类型分派：Mihomo 使用现有 telemetry schema；WireGuard 使用独立的 backend/interface/peer/counter/revision 状态模型。
+- 实例型配置、命令队列、ACK 结果和授权按 `(machine_code, agent_type, instance_id)` 隔离；旧版机器级 Agent 仍保留兼容路径。
+- 实例型 WebSocket 会话代际、连接替换和心跳顺序均按复合实例身份隔离；同一物理设备可同时保持 Mihomo 和 WireGuard 两条独立连接。
 
-因此，**当前 Master WebSocket 不能直接接受 WireGuard 专用心跳**。WireGuard Agent 不得伪造 Mihomo 状态字段，也不得复用 Mihomo 配置、密钥或命令队列来绕过这个限制。
+因此，**Master 已能接受 WireGuard 专用心跳和实例配置同步**。WireGuard Agent 不得伪造 Mihomo 状态字段，也不得复用 Mihomo 配置、密钥或命令队列。
 
 ## Master 必须先完成的兼容扩展
 
@@ -58,14 +58,14 @@ WireGuard 命令采用显式 allowlist（例如 apply、stop、status、peer rot
 
 ## WireGuard Agent 实现顺序
 
-1. Master 已支持复合 `(machine_code, agent_type, instance_id)` 身份、独立 JWT、WebSocket 会话代际、状态/配置/命令队列隔离和旧 Mihomo Agent 兼容；WireGuard Agent 现在开始携带实例身份注册。
-2. 本仓库实现与 Master 契约一致的注册客户端、单一 WSS 长连接、心跳 ACK、配置 SHA-256 校验、命令执行 journal、幂等 ACK、断线指数退避。
-3. 将 Linux kernel backend 接入 Agent service；Agent 控制面断线时不得清除已应用隧道配置或重复执行破坏性命令。
-4. 加入 RouterOS 原生 API Adapter；RouterOS 原生隧道状态明确标记为 host-side resource，不伪装成容器内接口。
-5. 增加独立 AMD64/ARM64 镜像与部署/升级/回滚流程，并完成 RouterOS 实机验证。
+1. **已完成**：Master 复合实例身份、独立 JWT、WebSocket 会话代际、状态/配置/命令队列隔离和旧 Mihomo Agent 兼容。
+2. **已完成**：WireGuard Agent 复合实例注册、WSS typed heartbeat/ACK、按实例请求配置、校验精确 SHA-256 和严格 YAML 后以 0600 原子保存；配置同步不会自动应用隧道。
+3. **待开发**：WireGuard typed command dispatcher、执行 journal、deadline/idempotency、配置 apply/stop 的安全 reconcile 与回滚；Master 目前仍拒绝 WireGuard 远程命令。
+4. **进行中**：RouterOS HTTPS REST 只读传输层基础；尚未接入 Runtime，也没有开放写操作。完整 RouterOS adapter 需要受控 reconcile、凭据/CA 管理和 host-side 状态标记。
+5. **待验收**：Linux/RouterOS 运行时集成、部署升级/回滚，以及 RouterOS 实机测试。
 
 ## 当前状态与验收门槛
 
-当前 WireGuard Agent 已实现初始 HTTP 注册、JWT 0600 保存、WSS typed heartbeat/ACK 和指数退避重连；本分支补齐可选的 agentType/instanceID 注册字段，并保留旧机器级配置兼容。Master 已支持复合实例身份及类型隔离的配置/命令存储，但 WireGuard Agent 尚未实现配置拉取、命令请求/分发器；Master 也继续拒绝 WireGuard 远程命令投递，直到专用执行器通过安全评审。RouterOS 原生 API Adapter 与实机验收仍未实现。
+当前 WireGuard Agent 已实现实例注册、JWT 0600 保存、WSS typed heartbeat/ACK、断线指数退避，以及按实例拉取 desired YAML。配置下发时先验证 Master 提供的精确字节 SHA-256，再验证 `s5m.wireguard/v1alpha1` schema 和本地密钥文件路径，最后原子保存为 0600；私钥/PSK 内容不从 Master 下载，也不会因配置同步自动 apply。Master 的命令队列和 ACK 已按实例隔离，但 WireGuard 命令投递仍被拒绝，因为 Agent typed dispatcher 和 apply/stop 安全 reconcile 尚未完成。RouterOS 当前只有只读 HTTPS REST 传输基础，尚未集成 Runtime 或实机验证。
 
-因此，在 Master 兼容 PR、Agent WSS 集成测试、旧版 Mihomo 回归测试、授权隔离测试和设备验收完成前，不得宣称 WireGuard 已接入共用主控面板或可用于生产。CI 通过仅证明代码检查，不代表真实 RouterOS 兼容性。
+Master/Agent 的实例隔离、WSS 心跳和配置同步已有 CI 回归；Master 还完成了 500 个并发实例的内存型 WebSocket 命令隔离测试（约 16 秒），但这不等同于 500 台真实设备的持续负载认证，也不覆盖 CPU/RAM、p95/p99、生产 SQLite 锁等待或重连风暴。RouterOS 写操作、实机兼容性和生产部署验收仍未完成。因此不得宣称 WireGuard 已具备完整生产级共用面板控制能力。
