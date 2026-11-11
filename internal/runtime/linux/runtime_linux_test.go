@@ -311,7 +311,7 @@ func TestStatusDoesNotTreatDownInterfaceAsRunning(t *testing.T) {
 func TestStopRefusesNonWireGuardInterface(t *testing.T) {
 	_, fake, runtime := setup(t)
 	markManaged(t, runtime, "eth0")
-	fake.outputs = map[string][]byte{"wg show interfaces": []byte("eth0\\n")}
+	fake.outputs = map[string][]byte{"wg show interfaces": []byte("eth0\n")}
 	fake.fail = "wg show eth0"
 	if err := runtime.Stop(context.Background(), "eth0"); err == nil {
 		t.Fatal("expected refusal for non-WireGuard interface")
@@ -373,7 +373,7 @@ func TestStopFailsClosedWhenWireGuardInventoryCannotBeRead(t *testing.T) {
 func TestStopRemovesManagedMarkerAfterDeletingInterface(t *testing.T) {
 	dir, fake, runtime := setup(t)
 	markManaged(t, runtime, "wgtest")
-	fake.outputs = map[string][]byte{"wg show interfaces": []byte("wgtest\\n")}
+	fake.outputs = map[string][]byte{"wg show interfaces": []byte("wgtest\n")}
 	if err := runtime.Stop(context.Background(), "wgtest"); err != nil {
 		t.Fatal(err)
 	}
@@ -433,7 +433,7 @@ func TestApplyDoesNotDeleteInterfaceWhenAtomicCreateFails(t *testing.T) {
 func TestStopRecoversStaleMarkerAfterInterfaceWasAlreadyDeleted(t *testing.T) {
 	dir, fake, runtime := setup(t)
 	markManaged(t, runtime, "wgtest")
-	fake.outputs = map[string][]byte{"wg show interfaces": []byte("wg-other\\n")}
+	fake.outputs = map[string][]byte{"wg show interfaces": []byte("wg-other\n")}
 	if err := runtime.Stop(context.Background(), "wgtest"); err != nil {
 		t.Fatalf("stop should recover after the interface was already deleted: %v", err)
 	}
