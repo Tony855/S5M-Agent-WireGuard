@@ -40,7 +40,11 @@ func NewRESTClient(endpoint, username, password string, client *http.Client) (*R
 	}
 	u.Path = "/rest"
 	u.RawPath = ""
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	baseTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, errors.New("RouterOS REST default transport is not a standard HTTP transport")
+	}
+	transport := baseTransport.Clone()
 	httpClient := &http.Client{Timeout: 8 * time.Second}
 	if client != nil {
 		httpClient.Timeout = client.Timeout
