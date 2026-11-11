@@ -41,6 +41,29 @@ type Peer struct {
 
 const maxConfigSize = 1 << 20
 
+// OpenRegular opens a regular file without following a final-component symlink.
+// It compares the opened descriptor with the pre-open directory entry to reject
+// replacement races between Lstat and Open.
+func OpenRegular(path string) (*os.File, error) {
+	before, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !before.Mode().IsRegular() || before.Mode()&os.ModeSymlink != 0 {
+		return nil, errors.New("file path must be a regular non-symlink file")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	after, err := file.Stat()
+	if err != nil || !after.Mode().IsRegular() || !os.SameFile(before, after) {
+		_ = file.Close()
+		return nil, errors.New("file path changed or is not a regular file")
+	}
+	return file, nil
+}
+
 func Load(path string) (Config, error) {
 	return LoadWithDataDir(path, filepath.Dir(path))
 }
@@ -49,17 +72,14 @@ func Load(path string) (Config, error) {
 // not relative to the location of the YAML file.
 func LoadWithDataDir(path, dataDir string) (Config, error) {
 	var cfg Config
-	file, err := os.Open(path)
+	file, err := OpenRegular(path)
 	if err != nil {
-		return cfg, fmt.Errorf("open config: %w", err)
+		return cfg, fmt.Errorf("open config safely: %w", err)
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
 		return cfg, fmt.Errorf("inspect config: %w", err)
-	}
-	if !info.Mode().IsRegular() {
-		return cfg, errors.New("config path must be a regular file")
 	}
 	if info.Size() > maxConfigSize {
 		return cfg, fmt.Errorf("config exceeds maximum size of %d bytes", maxConfigSize)

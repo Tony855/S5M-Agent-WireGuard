@@ -150,3 +150,19 @@ func TestLoadWithDataDirAcceptsConfigOutsideDataDirectory(t *testing.T) {
 		t.Fatalf("config outside data directory should be accepted: %v", err)
 	}
 }
+
+func TestLoadRejectsConfigSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "real.yaml")
+	body := "apiVersion: s5m.wireguard/v1alpha1\ninterface:\n  name: wg0\n  role: server\n  backend: linux-kernel\n  privateKeyFile: key\n"
+	if err := os.WriteFile(target, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "config.yaml")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if _, err := Load(link); err == nil {
+		t.Fatal("symlinked config file was accepted")
+	}
+}
