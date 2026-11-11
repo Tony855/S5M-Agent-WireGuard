@@ -48,7 +48,7 @@ var errManagedMarkerMissing = errors.New("managed interface marker is missing")
 type Runtime struct {
 	DataDir string
 	Runner  Runner
-	locks keyedlock.Locks
+	locks   keyedlock.Locks
 }
 
 func New(dataDir string) *Runtime {
