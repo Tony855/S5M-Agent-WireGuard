@@ -16,7 +16,7 @@ func TestRunReconnectsAfterWebSocketDisconnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var connections atomic.Int32
-	serverErr := make(chan error, 1)
+	serverErr := make(chan error, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count := connections.Add(1)
 		conn, err := (&websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}).Upgrade(w, r, nil)
