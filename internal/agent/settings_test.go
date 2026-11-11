@@ -11,6 +11,8 @@ func TestSaveSettingsUsesPrivatePermissionsAndRoundTrips(t *testing.T) {
 	want := Settings{
 		ControllerURL: "https://bind.example.test",
 		MachineCode:   "a1b2c3d4",
+		AgentType:     "wireguard",
+		InstanceID:    "wg-router-01",
 		Secret:        "dedicated-token",
 	}
 	if err := SaveSettings(path, want); err != nil {
@@ -50,5 +52,34 @@ func TestSettingsRejectPublicPlainHTTP(t *testing.T) {
 	}
 	if err := settings.Validate(); err == nil {
 		t.Fatal("expected public plain HTTP controller URL to be rejected")
+	}
+}
+
+func TestSettingsRejectPartialOrInvalidInstanceIdentity(t *testing.T) {
+	base := Settings{ControllerURL: "https://bind.example.test", MachineCode: "abc123", Secret: "dedicated-token"}
+	cases := []struct {
+		name string
+		edit func(*Settings)
+	}{
+		{name: "missing instance id", edit: func(s *Settings) { s.AgentType = "wireguard" }},
+		{name: "missing agent type", edit: func(s *Settings) { s.InstanceID = "wg-01" }},
+		{name: "wrong agent type", edit: func(s *Settings) { s.AgentType = "mihomo"; s.InstanceID = "wg-01" }},
+		{name: "invalid instance id", edit: func(s *Settings) { s.AgentType = "wireguard"; s.InstanceID = "bad/id" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			settings := base
+			tc.edit(&settings)
+			if err := settings.Validate(); err == nil {
+				t.Fatal("expected invalid instance identity to be rejected")
+			}
+		})
+	}
+}
+
+func TestSettingsKeepLegacyMachineScopedCompatibility(t *testing.T) {
+	settings := Settings{ControllerURL: "https://bind.example.test", MachineCode: "abc123", Secret: "dedicated-token"}
+	if err := settings.Validate(); err != nil {
+		t.Fatalf("legacy settings must remain valid: %v", err)
 	}
 }
