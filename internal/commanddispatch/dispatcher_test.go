@@ -28,13 +28,13 @@ peers: []
 `
 
 type fakeRuntime struct {
-	mu       sync.Mutex
-	applies  int
-	stops    int
-	statuses int
+	mu           sync.Mutex
+	applies      int
+	stops        int
+	statuses     int
 	deadlineSeen bool
-	entered  chan struct{}
-	release  chan struct{}
+	entered      chan struct{}
+	release      chan struct{}
 }
 
 func (f *fakeRuntime) Probe(context.Context) wr.Capabilities {
