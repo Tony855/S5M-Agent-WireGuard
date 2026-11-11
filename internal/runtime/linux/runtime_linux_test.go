@@ -18,6 +18,7 @@ import (
 type fakeRunner struct {
 	calls           []string
 	fail            string
+	failRollback    bool
 	outputs         map[string][]byte
 	linkOutput      string
 	rollbackBounded bool
@@ -37,7 +38,7 @@ func (f *fakeRunner) Run(ctx context.Context, name string, args ...string) ([]by
 		deadline, ok := ctx.Deadline()
 		f.rollbackBounded = ok && time.Until(deadline) > 0 && time.Until(deadline) <= 5*time.Second
 	}
-	if call == f.fail {
+	if call == f.fail || (f.failRollback && call == "ip link delete dev wgtest") {
 		return nil, errors.New("injected failure")
 	}
 	if strings.Contains(call, "link show") {
@@ -124,6 +125,19 @@ func TestApplyRollsBackCreatedInterface(t *testing.T) {
 	}
 	if fake.calls[len(fake.calls)-1] != "ip link delete dev wgtest" {
 		t.Fatalf("rollback missing: %v", fake.calls)
+	}
+}
+
+func TestApplyReportsRollbackFailure(t *testing.T) {
+	_, fake, runtime := setup(t)
+	fake.fail = "ip link set dev wgtest up"
+	fake.failRollback = true
+	err := runtime.Apply(context.Background(), testConfig())
+	if err == nil || !strings.Contains(err.Error(), "rollback incomplete") {
+		t.Fatalf("expected explicit rollback failure, got %v", err)
+	}
+	if !fake.rollbackBounded {
+		t.Fatalf("rollback did not receive a bounded cleanup context: %v", fake.calls)
 	}
 }
 
