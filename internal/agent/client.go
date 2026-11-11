@@ -24,6 +24,7 @@ const (
 )
 
 type StatusProvider func(context.Context) (map[string]any, error)
+type CommandHandler func(context.Context, json.RawMessage) (string, string)
 
 type Client struct {
 	Settings     Settings
@@ -33,6 +34,7 @@ type Client struct {
 	HTTPClient   *http.Client
 	Dialer       *websocket.Dialer
 	Status       StatusProvider
+	Command      CommandHandler
 	Logger       *log.Logger
 }
 
@@ -211,6 +213,9 @@ func (c *Client) runSession(ctx context.Context) error {
 	if err := c.requestConfig(conn); err != nil {
 		c.logf("WireGuard desired config sync rejected: %s", safeError(err))
 	}
+	if err := c.requestCommand(ctx, conn); err != nil {
+		c.logf("WireGuard command poll rejected: %s", safeError(err))
+	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -223,6 +228,9 @@ func (c *Client) runSession(ctx context.Context) error {
 			}
 			if err := c.requestConfig(conn); err != nil {
 				c.logf("WireGuard desired config sync rejected: %s", safeError(err))
+			}
+			if err := c.requestCommand(ctx, conn); err != nil {
+				c.logf("WireGuard command poll rejected: %s", safeError(err))
 			}
 		}
 	}

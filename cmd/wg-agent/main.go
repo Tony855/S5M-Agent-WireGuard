@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/agent"
+	"github.com/Tony855/S5M-Agent-WireGuard/internal/commanddispatch"
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/config"
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/runtime/linux"
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/secret"
@@ -133,9 +134,14 @@ func agentRun(args []string) {
 		fatal(err)
 	}
 	runtime := linux.New(*dataDir)
+	dispatcher, err := commanddispatch.New(*dataDir, *configPath, runtime)
+	if err != nil {
+		fatal(err)
+	}
 	client := &agent.Client{
 		Settings: settings, SettingsPath: *settingsPath,
 		ConfigPath: *configPath, DataDir: *dataDir,
+		Command: dispatcher.Handle,
 		Status: func(ctx context.Context) (map[string]any, error) {
 			return agent.BuildWireGuardStatus(ctx, *configPath, *dataDir, version, runtime), nil
 		},
