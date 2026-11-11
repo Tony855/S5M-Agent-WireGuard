@@ -4,18 +4,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
-
 const validWireGuardYAML = `apiVersion: s5m.wireguard/v1alpha1
 interface:
   name: wg0
