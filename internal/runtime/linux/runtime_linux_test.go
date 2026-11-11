@@ -458,3 +458,21 @@ func TestStopDoesNotRemoveMarkerWhenInventoryCannotBeRead(t *testing.T) {
 		t.Fatalf("marker must be retained when inventory is unknown: %v", err)
 	}
 }
+
+func TestApplyRefusesExistingManagedInterfaceWithoutDeletingIt(t *testing.T) {
+	dir, fake, runtime := setup(t)
+	markManaged(t, runtime, "wgtest")
+	fake.fail = "ip link add dev wgtest type wireguard"
+
+	if err := runtime.Apply(context.Background(), testConfig()); err == nil {
+		t.Fatal("expected atomic create to refuse an already-existing interface")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "runtime", "wgtest.managed")); err != nil {
+		t.Fatalf("existing ownership marker must remain untouched: %v", err)
+	}
+	for _, call := range fake.calls {
+		if strings.Contains(call, "ip link delete") || strings.HasPrefix(call, "wg setconf ") {
+			t.Fatalf("existing interface must not be modified or deleted: %v", fake.calls)
+		}
+	}
+}

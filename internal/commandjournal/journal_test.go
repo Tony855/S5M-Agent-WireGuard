@@ -146,3 +146,63 @@ func TestBeginPreservesExpiredTerminalRecordsToPreventIDReplay(t *testing.T) {
 		t.Fatal("expired command ID tombstone was removed")
 	}
 }
+
+func TestInterruptedCommandIDCannotBeReplayedAfterRestart(t *testing.T) {
+	dir := t.TempDir()
+	j, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, execute, err := j.Begin(input())
+	if err != nil || !execute || first.State != StateRunning {
+		t.Fatalf("initial begin: record=%#v execute=%v err=%v", first, execute, err)
+	}
+
+	reopened, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retry, execute, err := reopened.Begin(input())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if execute || retry.State != StateInterrupted {
+		t.Fatalf("interrupted command was replayable: record=%#v execute=%v", retry, execute)
+	}
+}
+
+func TestExpiredCommandTombstonesSurviveRestartAndRejectExtendedDeadlineReplay(t *testing.T) {
+	dir := t.TempDir()
+	j, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	for i := 0; i < maxRecords; i++ {
+		rec := input()
+		rec.ID = fmt.Sprintf("persisted-expired-%04d", i)
+		rec.Deadline = now.Add(-time.Minute)
+		rec.State = StateSucceeded
+		rec.StartedAt = now.Add(-2 * time.Minute)
+		rec.UpdatedAt = now.Add(-time.Minute)
+		j.records[rec.ID] = rec
+	}
+	if err := j.persist(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retry := input()
+	retry.ID = "persisted-expired-0000"
+	retry.Deadline = time.Now().Add(23 * time.Hour)
+	record, execute, err := reopened.Begin(retry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if execute || record.State != StateSucceeded {
+		t.Fatalf("extended-deadline duplicate was replayable: record=%#v execute=%v", record, execute)
+	}
+}
