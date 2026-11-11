@@ -122,7 +122,8 @@ func TestBeginRejectsUnsupportedCommandType(t *testing.T) {
 }
 
 func TestBeginCompactsOnlyExpiredTerminalRecords(t *testing.T) {
-	j, err := Open(t.TempDir())
+	root := t.TempDir()
+	j, err := Open(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +173,7 @@ func TestBeginCompactsOnlyExpiredTerminalRecords(t *testing.T) {
 		t.Fatal("new command was not persisted")
 	}
 
-	reopened, err := Open(j.dir)
+	reopened, err := Open(root)
 	if err != nil {
 		t.Fatal(err)
 	}
