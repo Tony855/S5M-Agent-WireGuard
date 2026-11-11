@@ -133,7 +133,12 @@ func (r *Runtime) Apply(ctx context.Context, cfg config.Config) error {
 			if markerCreated {
 				_ = os.Remove(r.markerPath(cfg.Interface.Name))
 			}
-			_, _ = run.Run(context.Background(), "ip", "link", "delete", "dev", cfg.Interface.Name)
+			// Rollback must survive cancellation of the command context, but it
+			// must never be an unbounded background operation. A stuck netlink
+			// helper must not pin the Agent command worker indefinitely.
+			rollbackCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, _ = run.Run(rollbackCtx, "ip", "link", "delete", "dev", cfg.Interface.Name)
 		}
 	}()
 
