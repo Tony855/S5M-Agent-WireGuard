@@ -209,7 +209,6 @@ func TestExpiredCommandTombstonesSurviveRestartAndRejectExtendedDeadlineReplay(t
 	}
 }
 
-
 func TestConcurrentDuplicateBeginExecutesOnlyOnce(t *testing.T) {
 	j, err := Open(t.TempDir())
 	if err != nil {
