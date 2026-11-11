@@ -43,6 +43,8 @@ func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 	return out, nil
 }
 
+var errManagedMarkerMissing = errors.New("managed interface marker is missing")
+
 type Runtime struct {
 	DataDir string
 	Runner  Runner
@@ -415,10 +417,24 @@ func (r *Runtime) Stop(ctx context.Context, name string) error {
 	}
 	unlock := r.lockInterface(name)
 	defer unlock()
-	if err := r.verifyManagedMarker(name); err != nil {
-		return err
-	}
 	run := r.runner()
+	if err := r.verifyManagedMarker(name); err != nil {
+		if !errors.Is(err, errManagedMarkerMissing) {
+			return err
+		}
+		// A repeated stop is successful only when the kernel confirms that
+		// the interface is no longer present as a WireGuard interface.
+		interfaces, showErr := run.Run(ctx, "wg", "show", "interfaces")
+		if showErr != nil {
+			return errors.New("cannot confirm whether the unmanaged WireGuard interface is already stopped")
+		}
+		for _, existing := range strings.Fields(string(interfaces)) {
+			if existing == name {
+				return errors.New("refusing to stop a WireGuard interface without this Agent's ownership marker")
+			}
+		}
+		return nil
+	}
 	if _, err := run.Run(ctx, "wg", "show", name); err != nil {
 		return errors.New("refusing to delete an interface that is not confirmed as WireGuard")
 	}
@@ -505,7 +521,10 @@ func (r *Runtime) verifyManagedMarker(name string) error {
 	path := filepath.Join(dir, name+".managed")
 	info, err := os.Lstat(path)
 	if err != nil {
-		return errors.New("interface is not registered as managed by this agent")
+		if errors.Is(err, os.ErrNotExist) {
+			return errManagedMarkerMissing
+		}
+		return errors.New("managed interface marker cannot be inspected")
 	}
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
 		return errors.New("managed interface marker has unsafe file type or permissions")
