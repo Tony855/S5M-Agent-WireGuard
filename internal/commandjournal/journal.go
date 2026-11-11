@@ -110,8 +110,7 @@ func (j *Journal) Begin(input Record) (Record, bool, error) {
 	}
 	if existing, ok := j.records[input.ID]; ok {
 		if existing.Type != input.Type || existing.PayloadSHA256 != strings.ToLower(input.PayloadSHA256) ||
-			existing.Revision != input.Revision || existing.ConfigSHA256 != strings.ToLower(input.ConfigSHA256) ||
-			!existing.Deadline.Equal(input.Deadline.UTC()) {
+			existing.Revision != input.Revision || existing.ConfigSHA256 != strings.ToLower(input.ConfigSHA256) {
 			return Record{}, false, errors.New("command ID conflicts with an existing journal record")
 		}
 		return existing, false, nil
@@ -155,6 +154,7 @@ func (j *Journal) Complete(id, payloadSHA256 string, succeeded bool, result stri
 		if r < 0x20 && r != '\t' { return -1 }
 		return r
 	}, result)
+	previous := rec
 	rec.State = StateFailed
 	if succeeded {
 		rec.State = StateSucceeded
@@ -163,6 +163,7 @@ func (j *Journal) Complete(id, payloadSHA256 string, succeeded bool, result stri
 	rec.UpdatedAt = time.Now().UTC()
 	j.records[id] = rec
 	if err := j.persist(); err != nil {
+		j.records[id] = previous
 		return Record{}, err
 	}
 	return rec, nil
@@ -207,8 +208,12 @@ func validateInput(r Record) error {
 }
 
 func (j *Journal) load() error {
+	pathInfo, pathErr := os.Lstat(j.path)
+	if errors.Is(pathErr, os.ErrNotExist) { return nil }
+	if pathErr != nil || pathInfo.Mode()&os.ModeSymlink != 0 || !pathInfo.Mode().IsRegular() {
+		return errors.New("command journal path is unsafe")
+	}
 	file, err := os.Open(j.path)
-	if errors.Is(err, os.ErrNotExist) { return nil }
 	if err != nil { return errors.New("cannot open command journal") }
 	defer file.Close()
 	info, err := file.Stat()
