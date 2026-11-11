@@ -16,17 +16,27 @@ import (
 )
 
 type fakeRunner struct {
-	calls      []string
-	fail       string
-	outputs    map[string][]byte
-	linkOutput string
+	calls           []string
+	fail            string
+	outputs         map[string][]byte
+	linkOutput      string
+	rollbackBounded bool
+	cancelOn        string
+	cancel          context.CancelFunc
 }
 
 func (f *fakeRunner) LookPath(name string) (string, error) { return "/usr/bin/" + name, nil }
 
-func (f *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
+func (f *fakeRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	call := name + " " + strings.Join(args, " ")
 	f.calls = append(f.calls, call)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if call == "ip link delete dev wgtest" {
+		deadline, ok := ctx.Deadline()
+		f.rollbackBounded = ok && time.Until(deadline) > 0 && time.Until(deadline) <= 5*time.Second
+	}
 	if call == f.fail {
 		return nil, errors.New("injected failure")
 	}
@@ -40,6 +50,9 @@ func (f *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte
 		if output, ok := f.outputs[call]; ok {
 			return output, nil
 		}
+	}
+	if f.cancelOn != "" && strings.HasPrefix(call, f.cancelOn) && f.cancel != nil {
+		f.cancel()
 	}
 	return nil, nil
 }
@@ -111,6 +124,22 @@ func TestApplyRollsBackCreatedInterface(t *testing.T) {
 	}
 	if fake.calls[len(fake.calls)-1] != "ip link delete dev wgtest" {
 		t.Fatalf("rollback missing: %v", fake.calls)
+	}
+}
+
+func TestApplyRollbackUsesBoundedIndependentContext(t *testing.T) {
+	_, fake, runtime := setup(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fake.cancelOn = "wg setconf wgtest"
+	fake.cancel = cancel
+	// Cancellation after interface creation must not suppress cleanup, and
+	// cleanup must have its own short deadline rather than an unbounded context.
+	if err := runtime.Apply(ctx, testConfig()); err == nil {
+		t.Fatal("expected canceled apply to fail")
+	}
+	if !fake.rollbackBounded {
+		t.Fatalf("rollback did not receive a bounded cleanup context: %v", fake.calls)
 	}
 }
 
