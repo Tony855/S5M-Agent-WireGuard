@@ -32,6 +32,7 @@ type fakeRuntime struct {
 	applies  int
 	stops    int
 	statuses int
+	deadlineSeen bool
 	entered  chan struct{}
 	release  chan struct{}
 }
@@ -45,9 +46,10 @@ func (f *fakeRuntime) Apply(context.Context, config.Config) error {
 	f.mu.Unlock()
 	return nil
 }
-func (f *fakeRuntime) Status(context.Context, string) (wr.Status, error) {
+func (f *fakeRuntime) Status(ctx context.Context, _ string) (wr.Status, error) {
 	f.mu.Lock()
 	f.statuses++
+	_, f.deadlineSeen = ctx.Deadline()
 	f.mu.Unlock()
 	if f.entered != nil {
 		select {
@@ -109,6 +111,35 @@ func makeCommand(t *testing.T, id, kind, revision, configSHA string, deadline ti
 		t.Fatal(err)
 	}
 	return raw
+}
+
+func TestDispatcherPassesCommandDeadlineToRuntime(t *testing.T) {
+	runtime := &fakeRuntime{}
+	d, _, revision := setupDispatcher(t, runtime)
+	raw := makeCommand(t, "status-deadline", "status", revision, "", time.Now().Add(time.Minute))
+	if status, _ := d.Handle(context.Background(), raw); status != "success" {
+		t.Fatalf("status command = %q", status)
+	}
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	if !runtime.deadlineSeen {
+		t.Fatal("runtime did not receive a context bounded by command deadline")
+	}
+}
+
+func TestLocalFileHashRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.yaml")
+	if err := os.WriteFile(target, []byte("config"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link.yaml")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := localFileHash(link); err == nil {
+		t.Fatal("symlinked config file was accepted")
+	}
 }
 
 func TestNewRejectsConfigOutsideDataVolumeAndSymlink(t *testing.T) {
