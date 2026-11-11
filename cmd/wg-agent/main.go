@@ -10,8 +10,8 @@ import (
 	"syscall"
 
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/agent"
-	"github.com/Tony855/S5M-Agent-WireGuard/internal/config"
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/commanddispatch"
+	"github.com/Tony855/S5M-Agent-WireGuard/internal/config"
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/runtime/linux"
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/secret"
 )
