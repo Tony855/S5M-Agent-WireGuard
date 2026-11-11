@@ -12,7 +12,7 @@ func TestSaveSettingsUsesPrivatePermissionsAndRoundTrips(t *testing.T) {
 		ControllerURL: "https://bind.example.test",
 		MachineCode:   "a1b2c3d4",
 		AgentType:     "wireguard",
-		InstanceID:    "wg-router-01",
+		InstanceID:    "wg.routeros-01",
 		Secret:        "dedicated-token",
 	}
 	if err := SaveSettings(path, want); err != nil {
@@ -62,7 +62,7 @@ func TestSettingsRejectPartialOrInvalidInstanceIdentity(t *testing.T) {
 		edit func(*Settings)
 	}{
 		{name: "missing instance id", edit: func(s *Settings) { s.AgentType = "wireguard" }},
-		{name: "missing agent type", edit: func(s *Settings) { s.InstanceID = "wg-01" }},
+		{name: "missing agent type", edit: func(s *Settings) { s.InstanceID = "wg.routeros-01" }},
 		{name: "wrong agent type", edit: func(s *Settings) { s.AgentType = "mihomo"; s.InstanceID = "wg-01" }},
 		{name: "invalid instance id", edit: func(s *Settings) { s.AgentType = "wireguard"; s.InstanceID = "bad/id" }},
 	}
