@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"sync/atomic"
+	"strings"
 	"testing"
 	"time"
 
@@ -114,7 +115,7 @@ func TestWebSocketAcceptsConcurrentAgentSessions(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			conn, _, err := websocket.DefaultDialer.Dial(server.URL, nil)
+			conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
 			if err != nil {
 				errs <- err
 				return
