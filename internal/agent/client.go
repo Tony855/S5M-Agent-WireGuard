@@ -19,7 +19,8 @@ import (
 
 const (
 	maxControllerResponse = 16 << 10
-	maxAgentWSMessage     = 16 << 10
+	maxAgentWSMessage     = (12 << 20) + (32 << 10)
+	maxAgentHeartbeat     = 16 << 10
 )
 
 type StatusProvider func(context.Context) (map[string]any, error)
@@ -27,6 +28,8 @@ type StatusProvider func(context.Context) (map[string]any, error)
 type Client struct {
 	Settings     Settings
 	SettingsPath string
+	ConfigPath   string
+	DataDir      string
 	HTTPClient   *http.Client
 	Dialer       *websocket.Dialer
 	Status       StatusProvider
@@ -180,8 +183,8 @@ func (c *Client) runSession(ctx context.Context) error {
 			"type": "heartbeat", "agent_type": "wireguard",
 			"id": heartbeatID, "status": status,
 		})
-		if err != nil || len(payload) > maxAgentWSMessage {
-			return errors.New("WireGuard heartbeat is invalid or exceeds the 16 KiB limit")
+		if err != nil || len(payload) > maxAgentHeartbeat {
+			return errors.New("WireGuard heartbeat is invalid or exceeds the 16 KiB heartbeat limit")
 		}
 		_ = conn.SetWriteDeadline(time.Now().Add(8 * time.Second))
 		if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
@@ -205,6 +208,9 @@ func (c *Client) runSession(ctx context.Context) error {
 	if err := sendHeartbeat(); err != nil {
 		return err
 	}
+	if err := c.requestConfig(conn); err != nil {
+		c.logf("WireGuard desired config sync rejected: %s", safeError(err))
+	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -214,6 +220,9 @@ func (c *Client) runSession(ctx context.Context) error {
 		case <-ticker.C:
 			if err := sendHeartbeat(); err != nil {
 				return err
+			}
+			if err := c.requestConfig(conn); err != nil {
+				c.logf("WireGuard desired config sync rejected: %s", safeError(err))
 			}
 		}
 	}
