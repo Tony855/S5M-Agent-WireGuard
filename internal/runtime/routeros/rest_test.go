@@ -2,6 +2,7 @@ package routeros
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -56,6 +57,22 @@ func TestRESTClientUsesHTTPSBasicAuthAndFixedReadResources(t *testing.T) {
 	}
 }
 
+type unsupportedRoundTripper struct{}
+
+func (unsupportedRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, fmt.Errorf("unused test transport")
+}
+
+func TestRESTClientRejectsTLSVerificationBypass(t *testing.T) {
+	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	if _, err := NewRESTClient("https://router.example", "monitor", "secret", insecure); err == nil {
+		t.Fatal("TLS certificate verification bypass was accepted")
+	}
+	custom := &http.Client{Transport: unsupportedRoundTripper{}}
+	if _, err := NewRESTClient("https://router.example", "monitor", "secret", custom); err == nil {
+		t.Fatal("uninspectable custom transport was accepted")
+	}
+}
 func TestRESTClientRejectsInsecureOrAmbiguousEndpoints(t *testing.T) {
 	cases := []string{
 		"http://192.0.2.1",
