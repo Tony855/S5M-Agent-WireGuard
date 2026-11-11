@@ -89,6 +89,25 @@ func markManaged(t *testing.T, runtime *Runtime, name string) {
 	}
 }
 
+func TestRuntimeInterfaceLockWaitHonorsContextDeadline(t *testing.T) {
+	_, _, runtime := setup(t)
+	release, err := runtime.lockInterface(context.Background(), "wgtest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if _, err := runtime.lockInterface(ctx, "wgtest"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("runtime interface lock wait error = %v", err)
+	}
+	other, err := runtime.lockInterface(context.Background(), "wgother")
+	if err != nil {
+		t.Fatalf("different interface lock should remain available: %v", err)
+	}
+	other()
+}
+
 func TestApplyConfigAndCleansTemporarySecret(t *testing.T) {
 	dir, fake, runtime := setup(t)
 	if err := runtime.Apply(context.Background(), testConfig()); err != nil {

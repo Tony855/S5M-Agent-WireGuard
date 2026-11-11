@@ -10,12 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/agent"
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/commandjournal"
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/config"
+	"github.com/Tony855/S5M-Agent-WireGuard/internal/keyedlock"
 	wr "github.com/Tony855/S5M-Agent-WireGuard/internal/runtime"
 )
 
@@ -25,8 +25,7 @@ type Dispatcher struct {
 	Journal    *commandjournal.Journal
 	Runtime    wr.Runtime
 
-	locksMu sync.Mutex
-	locks   map[string]*sync.Mutex
+	locks keyedlock.Locks
 }
 
 type command struct {
@@ -54,7 +53,7 @@ func New(dataDir, configPath string, runtime wr.Runtime) (*Dispatcher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open command journal: %w", err)
 	}
-	return &Dispatcher{DataDir: dataDir, ConfigPath: configPath, Journal: journal, Runtime: runtime, locks: make(map[string]*sync.Mutex)}, nil
+	return &Dispatcher{DataDir: dataDir, ConfigPath: configPath, Journal: journal, Runtime: runtime}, nil
 }
 
 func validateConfigPath(dataDir, configPath string) error {
@@ -90,17 +89,6 @@ func validateConfigPath(dataDir, configPath string) error {
 		}
 	}
 	return nil
-}
-
-func (d *Dispatcher) commandLock(id string) *sync.Mutex {
-	d.locksMu.Lock()
-	defer d.locksMu.Unlock()
-	if lock := d.locks[id]; lock != nil {
-		return lock
-	}
-	lock := &sync.Mutex{}
-	d.locks[id] = lock
-	return lock
 }
 
 // Handle accepts only the versioned typed command envelope. It never invokes a
@@ -153,9 +141,13 @@ func (d *Dispatcher) Handle(ctx context.Context, raw json.RawMessage) (string, s
 		return "failed", "command revision is invalid"
 	}
 
-	lock := d.commandLock("command:" + cmd.ID)
-	lock.Lock()
-	defer lock.Unlock()
+	executionCtx, cancel := context.WithDeadline(ctx, cmd.Deadline)
+	defer cancel()
+	unlockCommand, err := d.locks.Acquire(executionCtx, "command:"+cmd.ID)
+	if err != nil {
+		return "failed", "command deadline expired or context canceled while waiting for command lock"
+	}
+	defer unlockCommand()
 
 	record, execute, err := d.Journal.Begin(commandjournal.Record{
 		ID: cmd.ID, Type: cmd.Type, PayloadSHA256: cmd.PayloadSHA256,
@@ -175,11 +167,15 @@ func (d *Dispatcher) Handle(ctx context.Context, raw json.RawMessage) (string, s
 		}
 	}
 
-	interfaceLock := d.commandLock("interface:" + payload.Interface)
-	interfaceLock.Lock()
-	defer interfaceLock.Unlock()
-	executionCtx, cancel := context.WithDeadline(ctx, cmd.Deadline)
-	defer cancel()
+	unlockInterface, lockErr := d.locks.Acquire(executionCtx, "interface:"+payload.Interface)
+	if lockErr != nil {
+		result := safeResult("command deadline expired or context canceled while waiting for interface lock")
+		if _, completeErr := d.Journal.Complete(cmd.ID, cmd.PayloadSHA256, false, result); completeErr != nil {
+			return "failed", "command result could not be durably committed; manual reconciliation required"
+		}
+		return "failed", result
+	}
+	defer unlockInterface()
 	result, runErr := d.execute(executionCtx, cmd, payload)
 	if runErr != nil {
 		result = safeResult(runErr.Error())

@@ -14,10 +14,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/config"
+	"github.com/Tony855/S5M-Agent-WireGuard/internal/keyedlock"
 	wr "github.com/Tony855/S5M-Agent-WireGuard/internal/runtime"
 	"github.com/Tony855/S5M-Agent-WireGuard/internal/secret"
 )
@@ -48,27 +48,15 @@ var errManagedMarkerMissing = errors.New("managed interface marker is missing")
 type Runtime struct {
 	DataDir string
 	Runner  Runner
-	locksMu sync.Mutex
-	locks   map[string]*sync.Mutex
+	locks   keyedlock.Locks
 }
 
 func New(dataDir string) *Runtime {
-	return &Runtime{DataDir: dataDir, Runner: execRunner{}, locks: make(map[string]*sync.Mutex)}
+	return &Runtime{DataDir: dataDir, Runner: execRunner{}}
 }
 
-func (r *Runtime) lockInterface(name string) func() {
-	r.locksMu.Lock()
-	if r.locks == nil {
-		r.locks = make(map[string]*sync.Mutex)
-	}
-	lock := r.locks[name]
-	if lock == nil {
-		lock = &sync.Mutex{}
-		r.locks[name] = lock
-	}
-	r.locksMu.Unlock()
-	lock.Lock()
-	return lock.Unlock
+func (r *Runtime) lockInterface(ctx context.Context, name string) (func(), error) {
+	return r.locks.Acquire(ctx, name)
 }
 
 func (r *Runtime) runner() Runner {
@@ -107,7 +95,10 @@ func (r *Runtime) Apply(ctx context.Context, cfg config.Config) (retErr error) {
 	if err := cfg.Validate(r.DataDir); err != nil {
 		return fmt.Errorf("validate config: %w", err)
 	}
-	unlock := r.lockInterface(cfg.Interface.Name)
+	unlock, err := r.lockInterface(ctx, cfg.Interface.Name)
+	if err != nil {
+		return fmt.Errorf("wait for WireGuard interface lock: %w", err)
+	}
 	defer unlock()
 	for _, peer := range cfg.Peers {
 		for _, cidr := range peer.AllowedIPs {
@@ -284,7 +275,10 @@ func (r *Runtime) Status(ctx context.Context, name string) (wr.Status, error) {
 	if !validName(name) {
 		return wr.Status{}, errors.New("invalid interface name")
 	}
-	unlock := r.lockInterface(name)
+	unlock, err := r.lockInterface(ctx, name)
+	if err != nil {
+		return wr.Status{}, fmt.Errorf("wait for WireGuard interface lock: %w", err)
+	}
 	defer unlock()
 	if err := r.verifyManagedMarker(name); err != nil {
 		return wr.Status{}, err
@@ -415,7 +409,10 @@ func (r *Runtime) Stop(ctx context.Context, name string) error {
 	if !validName(name) {
 		return errors.New("invalid interface name")
 	}
-	unlock := r.lockInterface(name)
+	unlock, err := r.lockInterface(ctx, name)
+	if err != nil {
+		return fmt.Errorf("wait for WireGuard interface lock: %w", err)
+	}
 	defer unlock()
 	run := r.runner()
 	if err := r.verifyManagedMarker(name); err != nil {
