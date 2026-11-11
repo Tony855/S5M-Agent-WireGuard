@@ -178,7 +178,9 @@ func (d *Dispatcher) Handle(ctx context.Context, raw json.RawMessage) (string, s
 	interfaceLock := d.commandLock("interface:" + payload.Interface)
 	interfaceLock.Lock()
 	defer interfaceLock.Unlock()
-	result, runErr := d.execute(ctx, cmd, payload)
+	executionCtx, cancel := context.WithDeadline(ctx, cmd.Deadline)
+	defer cancel()
+	result, runErr := d.execute(executionCtx, cmd, payload)
 	if runErr != nil {
 		result = safeResult(runErr.Error())
 	}
@@ -247,6 +249,10 @@ func (d *Dispatcher) execute(ctx context.Context, cmd command, payload commandPa
 }
 
 func localFileHash(path string) (string, error) {
+	pathInfo, err := os.Lstat(path)
+	if err != nil || !pathInfo.Mode().IsRegular() || pathInfo.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("config path is not a regular non-symlink file")
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return "", err
