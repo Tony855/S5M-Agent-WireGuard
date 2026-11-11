@@ -79,7 +79,7 @@ func (s Settings) Validate() error {
 			return errors.New("plain HTTP controllerURL is allowed only for loopback development")
 		}
 	}
-	if !regexp.MustCompile("^[A-Za-z0-9_-]{1,64}$").MatchString(strings.TrimSpace(s.MachineCode)) {
+	if !regexp.MustCompile("^[A-Za-z0-9_.-]{1,96}$").MatchString(strings.TrimSpace(s.MachineCode)) {
 		return errors.New("machineCode format is invalid")
 	}
 	agentType := strings.TrimSpace(s.AgentType)
