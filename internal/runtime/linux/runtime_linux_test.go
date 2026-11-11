@@ -16,17 +16,22 @@ import (
 )
 
 type fakeRunner struct {
-	calls      []string
-	fail       string
-	outputs    map[string][]byte
-	linkOutput string
+	calls          []string
+	fail           string
+	outputs        map[string][]byte
+	linkOutput     string
+	rollbackBounded bool
 }
 
 func (f *fakeRunner) LookPath(name string) (string, error) { return "/usr/bin/" + name, nil }
 
-func (f *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
+func (f *fakeRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	call := name + " " + strings.Join(args, " ")
 	f.calls = append(f.calls, call)
+	if call == "ip link delete dev wgtest" {
+		deadline, ok := ctx.Deadline()
+		f.rollbackBounded = ok && time.Until(deadline) > 0 && time.Until(deadline) <= 5*time.Second
+	}
 	if call == f.fail {
 		return nil, errors.New("injected failure")
 	}
@@ -111,6 +116,20 @@ func TestApplyRollsBackCreatedInterface(t *testing.T) {
 	}
 	if fake.calls[len(fake.calls)-1] != "ip link delete dev wgtest" {
 		t.Fatalf("rollback missing: %v", fake.calls)
+	}
+}
+
+func TestApplyRollbackUsesBoundedIndependentContext(t *testing.T) {
+	_, fake, runtime := setup(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	// The first operation observes cancellation; rollback still receives its
+	// own short deadline instead of inheriting the expired command context.
+	if err := runtime.Apply(ctx, testConfig()); err == nil {
+		t.Fatal("expected canceled apply to fail")
+	}
+	if !fake.rollbackBounded {
+		t.Fatalf("rollback did not receive a bounded cleanup context: %v", fake.calls)
 	}
 }
 
