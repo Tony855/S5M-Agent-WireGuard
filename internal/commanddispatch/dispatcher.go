@@ -91,7 +91,6 @@ func validateConfigPath(dataDir, configPath string) error {
 	return nil
 }
 
-
 // Handle accepts only the versioned typed command envelope. It never invokes a
 // shell, parses command strings, or accepts backend-specific free-form options.
 func (d *Dispatcher) Handle(ctx context.Context, raw json.RawMessage) (string, string) {
