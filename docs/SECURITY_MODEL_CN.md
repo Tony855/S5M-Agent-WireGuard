@@ -34,3 +34,4 @@
 - Agent 在 `dataDir/runtime/<interface>.managed` 写入 0600 所有权标记；状态读取和停止操作必须先验证标记，避免管理主机上其他 WireGuard 接口。
 - Linux Apply 在接口创建后失败时，会使用独立且最长 5 秒的清理上下文删除本次创建的接口；不会继承已取消/超时的命令上下文，也不会启动无期限后台清理。该回滚目前只覆盖本次新建接口，不代表已支持更新既有接口的快照恢复。
 - Linux `stop` 在删除接口前还必须由 `wg show` 确认该接口确实是 WireGuard，避免误删 `eth0` 等普通网卡；状态采集也不会把普通网卡误报为 WireGuard 正常运行。
+- 重复 `stop` 仅在 `wg show interfaces` 成功确认目标接口已不存在时返回成功；若接口仍存在但缺少 Agent 所有权标记，或无法读取 WireGuard 接口清单，则拒绝操作。
