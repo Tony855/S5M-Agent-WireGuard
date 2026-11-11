@@ -83,10 +83,15 @@ func (c *Client) register(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	body, err := json.Marshal(map[string]string{
+	registration := map[string]string{
 		"machine_code": strings.TrimSpace(c.Settings.MachineCode),
 		"secret":       c.Settings.Secret,
-	})
+	}
+	if strings.TrimSpace(c.Settings.InstanceID) != "" {
+		registration["agent_type"] = strings.TrimSpace(c.Settings.AgentType)
+		registration["instance_id"] = strings.TrimSpace(c.Settings.InstanceID)
+	}
+	body, err := json.Marshal(registration)
 	if err != nil {
 		return errors.New("encode Agent registration request")
 	}
