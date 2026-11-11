@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -73,7 +74,7 @@ func (d *Dispatcher) Handle(ctx context.Context, raw json.RawMessage) (string, s
 		return "failed", "invalid WireGuard command envelope"
 	}
 	var trailing any
-	if err := decoder.Decode(&trailing); err == nil {
+	if err := decoder.Decode(&trailing); err != io.EOF {
 		return "failed", "WireGuard command contains trailing JSON"
 	}
 	if len(cmd.Payload) == 0 || !json.Valid(cmd.Payload) {
@@ -88,6 +89,9 @@ func (d *Dispatcher) Handle(ctx context.Context, raw json.RawMessage) (string, s
 		if !allowed[key] {
 			return "failed", "WireGuard command contains an unsupported field"
 		}
+	}
+	if !validCommandID(cmd.ID) {
+		return "failed", "invalid WireGuard command ID"
 	}
 	if cmd.Type != "apply" && cmd.Type != "stop" && cmd.Type != "status" {
 		return "failed", "unsupported WireGuard command type"
@@ -110,7 +114,7 @@ func (d *Dispatcher) Handle(ctx context.Context, raw json.RawMessage) (string, s
 		return "failed", "command revision is invalid"
 	}
 
-	lock := d.commandLock(cmd.ID)
+	lock := d.commandLock("command:" + cmd.ID)
 	lock.Lock()
 	defer lock.Unlock()
 
@@ -132,6 +136,9 @@ func (d *Dispatcher) Handle(ctx context.Context, raw json.RawMessage) (string, s
 		}
 	}
 
+	interfaceLock := d.commandLock("interface:" + payload.Interface)
+	interfaceLock.Lock()
+	defer interfaceLock.Unlock()
 	result, runErr := d.execute(ctx, cmd, payload)
 	if runErr != nil {
 		result = safeResult(runErr.Error())
@@ -201,11 +208,32 @@ func (d *Dispatcher) execute(ctx context.Context, cmd command, payload commandPa
 }
 
 func localFileHash(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() > (1<<20) {
+		return "", errors.New("config file is unsafe or oversized")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, (1<<20)+1))
+	if err != nil || len(data) > (1<<20) {
+		return "", errors.New("config file is unreadable or oversized")
+	}
 	return commandjournal.PayloadHash(data), nil
+}
+
+func validCommandID(value string) bool {
+	if len(value) == 0 || len(value) > 128 {
+		return false
+	}
+	for _, r := range value {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("._:-", r)) {
+			return false
+		}
+	}
+	return true
 }
 
 func validInterface(value string) bool {
