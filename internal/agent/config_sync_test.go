@@ -155,3 +155,21 @@ func TestRequestConfigUsesMasterWSEnvelopeAndStoresConfig(t *testing.T) {
 		t.Fatal("WSS config payload was not stored exactly")
 	}
 }
+
+func TestFileSHA256RejectsOversizedFileBeforeHashing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "large.yaml")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(maxSyncedConfigBytes + 1); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fileSHA256(path); err == nil {
+		t.Fatal("expected oversized config to be rejected")
+	}
+}
