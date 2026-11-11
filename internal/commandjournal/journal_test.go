@@ -146,7 +146,7 @@ func TestBeginPreservesExpiredTerminalRecordsToPreventIDReplay(t *testing.T) {
 		t.Fatal("expired command ID tombstone was removed")
 	}
 }
- 
+
 func TestInterruptedCommandIDCannotBeReplayedAfterRestart(t *testing.T) {
 	dir := t.TempDir()
 	j, err := Open(dir)
