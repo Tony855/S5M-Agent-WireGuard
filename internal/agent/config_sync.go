@@ -20,15 +20,24 @@ func fileSHA256(path string) (string, error) {
 	if strings.TrimSpace(path) == "" {
 		return "", nil
 	}
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return "", nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("read local WireGuard config: %w", err)
+		return "", fmt.Errorf("open local WireGuard config: %w", err)
 	}
-	if len(data) > maxSyncedConfigBytes {
-		return "", errors.New("local WireGuard config exceeds 2 MiB")
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return "", fmt.Errorf("inspect local WireGuard config: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Size() > maxSyncedConfigBytes {
+		return "", errors.New("local WireGuard config is not a regular file or exceeds 2 MiB")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxSyncedConfigBytes+1))
+	if err != nil || len(data) > maxSyncedConfigBytes {
+		return "", errors.New("local WireGuard config is unreadable or exceeds 2 MiB")
 	}
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:]), nil
