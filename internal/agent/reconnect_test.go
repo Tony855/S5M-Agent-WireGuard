@@ -6,9 +6,9 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
-	"strings"
 	"testing"
 	"time"
 
@@ -93,7 +93,6 @@ func TestRunReconnectsAfterWebSocketDisconnect(t *testing.T) {
 		t.Fatal("second WebSocket session did not complete")
 	}
 }
-
 
 func TestWebSocketAcceptsConcurrentAgentSessions(t *testing.T) {
 	const clients = 100
