@@ -319,11 +319,34 @@ func TestStatusDoesNotMarkNonWireGuardInterfaceRunning(t *testing.T) {
 
 func TestStopRequiresManagedMarker(t *testing.T) {
 	_, fake, runtime := setup(t)
+	fake.outputs = map[string][]byte{"wg show interfaces": []byte("wg0\n")}
 	if err := runtime.Stop(context.Background(), "wg0"); err == nil {
 		t.Fatal("expected unmanaged interface refusal")
 	}
-	if len(fake.calls) != 0 {
-		t.Fatalf("commands ran for unmanaged interface: %v", fake.calls)
+	if len(fake.calls) != 1 || fake.calls[0] != "wg show interfaces" {
+		t.Fatalf("unexpected commands for unmanaged interface: %v", fake.calls)
+	}
+}
+
+func TestStopIsIdempotentWhenInterfaceIsAlreadyAbsent(t *testing.T) {
+	_, fake, runtime := setup(t)
+	fake.outputs = map[string][]byte{"wg show interfaces": []byte("")}
+	if err := runtime.Stop(context.Background(), "wg0"); err != nil {
+		t.Fatalf("repeated stop should succeed when interface is absent: %v", err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0] != "wg show interfaces" {
+		t.Fatalf("unexpected commands for absent interface: %v", fake.calls)
+	}
+}
+
+func TestStopFailsClosedWhenWireGuardInventoryCannotBeRead(t *testing.T) {
+	_, fake, runtime := setup(t)
+	fake.fail = "wg show interfaces"
+	if err := runtime.Stop(context.Background(), "wg0"); err == nil {
+		t.Fatal("expected inventory failure to prevent idempotent success")
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("unexpected commands after inventory failure: %v", fake.calls)
 	}
 }
 
