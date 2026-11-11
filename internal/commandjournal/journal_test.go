@@ -206,3 +206,40 @@ func TestExpiredCommandTombstonesSurviveRestartAndRejectExtendedDeadlineReplay(t
 		t.Fatalf("extended-deadline duplicate was replayable: record=%#v execute=%v", record, execute)
 	}
 }
+
+
+func TestConcurrentDuplicateBeginExecutesOnlyOnce(t *testing.T) {
+	j, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const workers = 64
+	var wg sync.WaitGroup
+	var executions atomic.Int32
+	errs := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, execute, beginErr := j.Begin(input())
+			if beginErr != nil {
+				errs <- beginErr
+				return
+			}
+			if execute {
+				executions.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("concurrent Begin failed: %v", err)
+	}
+	if got := executions.Load(); got != 1 {
+		t.Fatalf("concurrent duplicate command executions = %d, want exactly 1", got)
+	}
+	if got := len(j.List()); got != 1 {
+		t.Fatalf("journal records = %d, want 1", got)
+	}
+}
