@@ -15,6 +15,7 @@
 5. 所有 API 操作使用 TLS；RouterOS API TLS 必须验证证书，禁止默认跳过证书验证。
 6. 不接受任意 shell、脚本、RouterOS CLI 或用户提供的二进制命令。
 7. 所有控制命令必须绑定 instance ID、command ID、deadline、期望配置 revision；重复请求返回已存结果，不重复执行。
+   - deadline 同时约束等待 command ID 锁、接口锁和 Runtime 内部接口锁；锁等待超时的已入 Journal 命令必须持久化为失败，不能遗留为 running。
 8. 路由变更必须先检查管理路径和 AllowedIPs 冲突；未经显式批准不得安装默认路由。
 9. 配置应用采用 prepare -> apply -> verify -> commit；失败恢复前一份配置与运行态。
 10. 遥测不包含 private key、PSK、Token、RouterOS 凭据或完整配置内容。
