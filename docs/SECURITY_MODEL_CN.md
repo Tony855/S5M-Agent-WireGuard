@@ -10,14 +10,15 @@
 
 1. 配置只允许引用 data directory 内的密钥文件；拒绝绝对路径、路径穿越和逃逸到数据目录外的符号链接。
 2. 密钥文件创建时使用 0600，父目录使用 0700；读取时校验普通文件类型和权限，发现权限过宽则拒绝读取。
-3. 日志字段采用 allowlist；禁止 dump YAML、环境变量、RouterOS API 原始响应和完整命令参数。
-4. Agent token 与 RouterOS API 密码不得作为命令行参数；使用受限权限文件或 secret provider。
-5. 所有 API 操作使用 TLS；RouterOS API TLS 必须验证证书，禁止默认跳过证书验证。
-6. 不接受任意 shell、脚本、RouterOS CLI 或用户提供的二进制命令。
-7. 所有控制命令必须绑定 instance ID、command ID、deadline、期望配置 revision；重复请求返回已存结果，不重复执行。
-8. 路由变更必须先检查管理路径和 AllowedIPs 冲突；未经显式批准不得安装默认路由。
-9. 配置应用采用 prepare -> apply -> verify -> commit；失败恢复前一份配置与运行态。
-10. 遥测不包含 private key、PSK、Token、RouterOS 凭据或完整配置内容。
+3. Agent settings 文件通过稳定的普通文件打开流程读取，拒绝符号链接及检查与打开之间的文件替换竞态。
+4. 日志字段采用 allowlist；禁止 dump YAML、环境变量、RouterOS API 原始响应和完整命令参数。
+5. Agent token 与 RouterOS API 密码不得作为命令行参数；使用受限权限文件或 secret provider。
+6. 所有 API 操作使用 TLS；RouterOS API TLS 必须验证证书，禁止默认跳过证书验证。
+7. 不接受任意 shell、脚本、RouterOS CLI 或用户提供的二进制命令。
+8. 所有控制命令必须绑定 instance ID、command ID、deadline、期望配置 revision；重复请求返回已存结果，不重复执行。
+9. 路由变更必须先检查管理路径和 AllowedIPs 冲突；未经显式批准不得安装默认路由。
+10. 配置应用采用 prepare -> apply -> verify -> commit；失败恢复前一份配置与运行态。
+11. 遥测不包含 private key、PSK、Token、RouterOS 凭据或完整配置内容。
 
 ## 当前实现与待实现
 

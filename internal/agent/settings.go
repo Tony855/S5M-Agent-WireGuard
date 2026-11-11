@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 
+	wireguardconfig "github.com/Tony855/S5M-Agent-WireGuard/internal/config"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -27,9 +29,9 @@ type Settings struct {
 
 func LoadSettings(path string) (Settings, error) {
 	var settings Settings
-	file, err := os.Open(path)
+	file, err := wireguardconfig.OpenRegular(path)
 	if err != nil {
-		return settings, fmt.Errorf("open Agent settings: %w", err)
+		return settings, fmt.Errorf("open Agent settings safely: %w", err)
 	}
 	defer file.Close()
 	info, err := file.Stat()

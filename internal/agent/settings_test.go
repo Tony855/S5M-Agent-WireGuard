@@ -34,6 +34,22 @@ func TestSaveSettingsUsesPrivatePermissionsAndRoundTrips(t *testing.T) {
 	}
 }
 
+func TestLoadSettingsRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.yaml")
+	link := filepath.Join(dir, "agent.yaml")
+	data := []byte("controllerURL: https://bind.example.test\nmachineCode: abc123\ntoken: abcdefghijklmnop\n")
+	if err := os.WriteFile(target, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadSettings(link); err == nil {
+		t.Fatal("expected symlinked Agent settings to be rejected")
+	}
+}
+
 func TestLoadSettingsRejectsBroadPermissions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agent.yaml")
 	if err := os.WriteFile(path, []byte("controllerURL: https://bind.example.test\nmachineCode: abc123\ntoken: abcdefghijklmnop\n"), 0o644); err != nil {
