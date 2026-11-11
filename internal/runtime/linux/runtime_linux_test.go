@@ -21,6 +21,8 @@ type fakeRunner struct {
 	outputs        map[string][]byte
 	linkOutput     string
 	rollbackBounded bool
+	cancelOn        string
+	cancel          context.CancelFunc
 }
 
 func (f *fakeRunner) LookPath(name string) (string, error) { return "/usr/bin/" + name, nil }
@@ -48,6 +50,9 @@ func (f *fakeRunner) Run(ctx context.Context, name string, args ...string) ([]by
 		if output, ok := f.outputs[call]; ok {
 			return output, nil
 		}
+	}
+	if call == f.cancelOn && f.cancel != nil {
+		f.cancel()
 	}
 	return nil, nil
 }
@@ -125,9 +130,11 @@ func TestApplyRollsBackCreatedInterface(t *testing.T) {
 func TestApplyRollbackUsesBoundedIndependentContext(t *testing.T) {
 	_, fake, runtime := setup(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	// The first operation observes cancellation; rollback still receives its
-	// own short deadline instead of inheriting the expired command context.
+	defer cancel()
+	fake.cancelOn = "wg setconf wgtest"
+	fake.cancel = cancel
+	// Cancellation after interface creation must not suppress cleanup, and
+	// cleanup must have its own short deadline rather than an unbounded context.
 	if err := runtime.Apply(ctx, testConfig()); err == nil {
 		t.Fatal("expected canceled apply to fail")
 	}
