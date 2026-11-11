@@ -173,3 +173,45 @@ func TestFileSHA256RejectsOversizedFileBeforeHashing(t *testing.T) {
 		t.Fatal("expected oversized config to be rejected")
 	}
 }
+
+
+func TestStoreSyncedConfigRejectsTargetOutsideDataDirectory(t *testing.T) {
+	dataDir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "config.yaml")
+	sum := sha256.Sum256([]byte(validWireGuardYAML))
+	if err := storeSyncedConfig(outside, dataDir, validWireGuardYAML, hex.EncodeToString(sum[:])); err == nil {
+		t.Fatal("expected config target outside data directory to be rejected")
+	}
+	if _, err := os.Stat(outside); !os.IsNotExist(err) {
+		t.Fatalf("outside config target was unexpectedly created: %v", err)
+	}
+}
+
+func TestStoreSyncedConfigRejectsSymlinkedParentDirectory(t *testing.T) {
+	dataDir := t.TempDir()
+	outsideDir := t.TempDir()
+	if err := os.Symlink(outsideDir, filepath.Join(dataDir, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dataDir, "linked", "config.yaml")
+	sum := sha256.Sum256([]byte(validWireGuardYAML))
+	if err := storeSyncedConfig(path, dataDir, validWireGuardYAML, hex.EncodeToString(sum[:])); err == nil {
+		t.Fatal("expected symlinked config parent to be rejected")
+	}
+	if _, err := os.Stat(filepath.Join(outsideDir, "config.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("symlink target was unexpectedly written: %v", err)
+	}
+}
+
+func TestStoreSyncedConfigCreatesNestedRealDirectories(t *testing.T) {
+	dataDir := t.TempDir()
+	path := filepath.Join(dataDir, "configs", "wireguard", "config.yaml")
+	sum := sha256.Sum256([]byte(validWireGuardYAML))
+	if err := storeSyncedConfig(path, dataDir, validWireGuardYAML, hex.EncodeToString(sum[:])); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != validWireGuardYAML {
+		t.Fatalf("nested config not stored correctly: err=%v", err)
+	}
+}
