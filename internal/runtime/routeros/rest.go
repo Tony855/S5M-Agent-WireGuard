@@ -2,6 +2,7 @@ package routeros
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,14 +40,36 @@ func NewRESTClient(endpoint, username, password string, client *http.Client) (*R
 	}
 	u.Path = "/rest"
 	u.RawPath = ""
+	transport := http.DefaultTransport.(*http.Transport).Clone()
 	httpClient := &http.Client{Timeout: 8 * time.Second}
 	if client != nil {
-		copy := *client
-		httpClient = &copy
+		httpClient.Timeout = client.Timeout
 		if httpClient.Timeout <= 0 {
 			httpClient.Timeout = 8 * time.Second
 		}
+		if client.Transport != nil {
+			provided, ok := client.Transport.(*http.Transport)
+			if !ok {
+				return nil, errors.New("RouterOS REST custom transport must be a standard HTTP transport with verifiable TLS settings")
+			}
+			transport = provided.Clone()
+		}
 	}
+	if transport.DialTLS != nil || transport.DialTLSContext != nil {
+		return nil, errors.New("RouterOS REST custom TLS dialers are not supported")
+	}
+	if transport.TLSClientConfig == nil {
+		transport.TLSClientConfig = &tls.Config{}
+	} else {
+		transport.TLSClientConfig = transport.TLSClientConfig.Clone()
+	}
+	if transport.TLSClientConfig.InsecureSkipVerify {
+		return nil, errors.New("RouterOS REST TLS certificate verification cannot be disabled")
+	}
+	if transport.TLSClientConfig.MinVersion < tls.VersionTLS12 {
+		transport.TLSClientConfig.MinVersion = tls.VersionTLS12
+	}
+	httpClient.Transport = transport
 	// Never forward Basic credentials to a redirect target.
 	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
