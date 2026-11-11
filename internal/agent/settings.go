@@ -90,7 +90,7 @@ func (s Settings) Validate() error {
 	if agentType != "" && agentType != "wireguard" {
 		return errors.New("agentType must be wireguard")
 	}
-	if instanceID != "" && !regexp.MustCompile("^[A-Za-z0-9_-]{1,64}$").MatchString(instanceID) {
+	if instanceID != "" && !regexp.MustCompile("^[A-Za-z0-9_.-]{1,96}$").MatchString(instanceID) {
 		return errors.New("instanceID format is invalid")
 	}
 	if len(s.Secret) > 256 || len(s.Token) > 4096 {
