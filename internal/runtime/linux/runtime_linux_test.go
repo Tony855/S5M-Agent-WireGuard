@@ -51,7 +51,7 @@ func (f *fakeRunner) Run(ctx context.Context, name string, args ...string) ([]by
 			return output, nil
 		}
 	}
-	if call == f.cancelOn && f.cancel != nil {
+	if f.cancelOn != "" && strings.HasPrefix(call, f.cancelOn) && f.cancel != nil {
 		f.cancel()
 	}
 	return nil, nil
