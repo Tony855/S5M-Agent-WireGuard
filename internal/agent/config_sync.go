@@ -99,7 +99,9 @@ func storeSyncedConfig(path, dataDir, yamlText, expectedSHA256 string) error {
 // path alias to write outside the Agent's persistent data volume.
 func secureConfigTarget(path, dataDir string) (string, error) {
 	rootAbs, err := filepath.Abs(dataDir)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	targetAbs, err := filepath.Abs(path)
 	if err != nil { return "", err }
 	rel, err := filepath.Rel(rootAbs, targetAbs)
@@ -107,14 +109,18 @@ func secureConfigTarget(path, dataDir string) (string, error) {
 		return "", errors.New("WireGuard config path must be inside the Agent data directory")
 	}
 	root, err := filepath.EvalSymlinks(rootAbs)
-	if err != nil { return "", errors.New("Agent data directory is unavailable or unsafe") }
+	if err != nil {
+		return "", errors.New("Agent data directory is unavailable or unsafe")
+	}
 	rootInfo, err := os.Lstat(root)
 	if err != nil || !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
 		return "", errors.New("Agent data directory must be a real directory")
 	}
 	dir := root
 	for _, part := range strings.Split(filepath.Dir(rel), string(filepath.Separator)) {
-		if part == "." || part == "" { continue }
+		if part == "." || part == "" {
+			continue
+		}
 		dir = filepath.Join(dir, part)
 		if err := os.Mkdir(dir, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
 			return "", fmt.Errorf("create WireGuard config directory: %w", err)
