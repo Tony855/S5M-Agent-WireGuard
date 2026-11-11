@@ -16,10 +16,10 @@ import (
 )
 
 type fakeRunner struct {
-	calls          []string
-	fail           string
-	outputs        map[string][]byte
-	linkOutput     string
+	calls           []string
+	fail            string
+	outputs         map[string][]byte
+	linkOutput      string
 	rollbackBounded bool
 	cancelOn        string
 	cancel          context.CancelFunc
