@@ -56,5 +56,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/s5m-agent-wireguard:latest
-            ghcr.io/${{ github.repository_owner }}/s5m-agent-wireguard:${{ github.sha }}
+            ghcr.io/tony855/s5m-agent-wireguard:latest
+            ghcr.io/tony855/s5m-agent-wireguard:${{ github.sha }}
