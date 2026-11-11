@@ -21,7 +21,7 @@ func TestRegisterPersistsDedicatedTokenAndClearsSecret(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Fatal(err)
 		}
-		if request["machine_code"] != "node_01" || request["secret"] != "one-time-dedicated-secret" {
+		if request["machine_code"] != "node_01" || request["secret"] != "one-time-dedicated-secret" || request["agent_type"] != "wireguard" || request["instance_id"] != "wg-router-01" {
 			t.Fatalf("unexpected registration body: %#v", request)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -34,6 +34,8 @@ func TestRegisterPersistsDedicatedTokenAndClearsSecret(t *testing.T) {
 		Settings: Settings{
 			ControllerURL: server.URL,
 			MachineCode:   "node_01",
+			AgentType:     "wireguard",
+			InstanceID:    "wg-router-01",
 			Secret:        "one-time-dedicated-secret",
 		},
 		SettingsPath: settingsPath,
@@ -48,7 +50,7 @@ func TestRegisterPersistsDedicatedTokenAndClearsSecret(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.Token != "signed-agent-jwt-token" || saved.Secret != "" {
+	if saved.Token != "signed-agent-jwt-token" || saved.Secret != "" || saved.AgentType != "wireguard" || saved.InstanceID != "wg-router-01" {
 		t.Fatalf("persisted credentials = %#v", saved)
 	}
 }
