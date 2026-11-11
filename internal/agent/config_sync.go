@@ -105,7 +105,9 @@ func secureConfigTarget(path, dataDir string) (string, error) {
 		return "", err
 	}
 	targetAbs, err := filepath.Abs(path)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	rel, err := filepath.Rel(rootAbs, targetAbs)
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", errors.New("WireGuard config path must be inside the Agent data directory")
