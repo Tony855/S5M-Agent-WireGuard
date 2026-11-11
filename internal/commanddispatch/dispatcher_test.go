@@ -164,6 +164,53 @@ func TestDispatcherRejectsUnknownFieldsAndUnsupportedTypes(t *testing.T) {
 	}
 }
 
+func TestDifferentCommandsForSameInterfaceAreSerialized(t *testing.T) {
+	runtime := &fakeRuntime{entered: make(chan struct{}, 2), release: make(chan struct{})}
+	d, _, revision := setupDispatcher(t, runtime)
+	first := makeCommand(t, "status-serial-1", "status", revision, "", time.Now().Add(time.Minute))
+	second := makeCommand(t, "status-serial-2", "status", revision, "", time.Now().Add(time.Minute))
+	firstDone := make(chan struct{})
+	go func() {
+		defer close(firstDone)
+		if status, _ := d.Handle(context.Background(), first); status != "success" {
+			t.Errorf("first status command = %q", status)
+		}
+	}()
+	select {
+	case <-runtime.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first command did not enter runtime")
+	}
+	secondDone := make(chan struct{})
+	go func() {
+		defer close(secondDone)
+		if status, _ := d.Handle(context.Background(), second); status != "success" {
+			t.Errorf("second status command = %q", status)
+		}
+	}()
+	select {
+	case <-runtime.entered:
+		t.Fatal("second command entered runtime concurrently for the same interface")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(runtime.release)
+	select {
+	case <-firstDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first command did not finish")
+	}
+	select {
+	case <-runtime.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("second command did not enter runtime after first completed")
+	}
+	select {
+	case <-secondDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("second command did not finish")
+	}
+}
+
 func TestInterruptedCommandIsNotReplayedAfterRestart(t *testing.T) {
 	runtime := &fakeRuntime{}
 	d, dir, revision := setupDispatcher(t, runtime)
