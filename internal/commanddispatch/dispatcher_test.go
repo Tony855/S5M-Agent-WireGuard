@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -257,6 +258,50 @@ func TestDifferentCommandsForSameInterfaceAreSerialized(t *testing.T) {
 	case <-secondDone:
 	case <-time.After(2 * time.Second):
 		t.Fatal("second command did not finish")
+	}
+}
+
+func TestInterfaceLockWaitHonorsCommandDeadline(t *testing.T) {
+	runtime := &fakeRuntime{entered: make(chan struct{}, 2), release: make(chan struct{})}
+	d, _, revision := setupDispatcher(t, runtime)
+	first := makeCommand(t, "status-lock-holder", "status", revision, "", time.Now().Add(time.Minute))
+	firstDone := make(chan struct{})
+	go func() {
+		defer close(firstDone)
+		if status, _ := d.Handle(context.Background(), first); status != "success" {
+			t.Errorf("lock holder status = %q", status)
+		}
+	}()
+	select {
+	case <-runtime.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first command did not acquire interface lock")
+	}
+
+	second := makeCommand(t, "status-lock-waiter", "status", revision, "", time.Now().Add(40*time.Millisecond))
+	started := time.Now()
+	status, message := d.Handle(context.Background(), second)
+	if status != "failed" || !strings.Contains(message, "waiting for interface lock") {
+		t.Fatalf("expired lock waiter result = %q %q", status, message)
+	}
+	if time.Since(started) > time.Second {
+		t.Fatal("command deadline was not enforced while waiting for interface lock")
+	}
+	record, ok := d.Journal.Get("status-lock-waiter")
+	if !ok || record.State != commandjournal.StateFailed {
+		t.Fatalf("expired lock waiter was not durably completed as failed: %#v exists=%t", record, ok)
+	}
+	close(runtime.release)
+	select {
+	case <-firstDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first command did not finish after release")
+	}
+	runtime.mu.Lock()
+	statuses := runtime.statuses
+	runtime.mu.Unlock()
+	if statuses != 1 {
+		t.Fatalf("expired waiter reached runtime; status calls=%d", statuses)
 	}
 }
 
