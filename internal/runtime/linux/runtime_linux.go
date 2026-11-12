@@ -165,7 +165,7 @@ func (r *Runtime) Apply(ctx context.Context, cfg config.Config) (retErr error) {
 	if _, err = run.Run(ctx, "ip", "link", "set", "dev", cfg.Interface.Name, "up"); err != nil {
 		return fmt.Errorf("bring interface up: %w", err)
 	}
-	if err := r.writeManagedMarker(cfg.Interface.Name); err != nil {
+	if err := r.writeManagedStateMarker(cfg.Interface.Name, cfg); err != nil {
 		return fmt.Errorf("record managed interface ownership: %w", err)
 	}
 	markerCreated = true
@@ -549,8 +549,8 @@ func (r *Runtime) verifyManagedMarker(name string) error {
 	if err != nil {
 		return errors.New("managed interface marker cannot be read")
 	}
-	if string(data) != "s5m-agent-wireguard/v1\n"+name+"\n" {
-		return errors.New("managed interface marker is invalid")
+	if err := validateManagedMarker(data, name); err != nil {
+		return err
 	}
 	return nil
 }
