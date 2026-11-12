@@ -139,3 +139,22 @@ func TestWebSocketAcceptsConcurrentAgentSessions(t *testing.T) {
 		t.Fatalf("accepted concurrent WebSocket sessions = %d, want %d", got, clients)
 	}
 }
+
+func TestReconnectDelayIsStableAndBoundedPerMachine(t *testing.T) {
+	const base = 20 * time.Second
+	first := reconnectDelay("machine-a", base)
+	second := reconnectDelay("machine-a", base)
+	if first != second {
+		t.Fatalf("same machine reconnect jitter changed: %v != %v", first, second)
+	}
+	if first < base || first > base+base/4 {
+		t.Fatalf("reconnect delay outside bounded jitter window: %v", first)
+	}
+	other := reconnectDelay("machine-b", base)
+	if other == first {
+		t.Fatalf("different machine IDs unexpectedly share the same delay: %v", first)
+	}
+	if got := reconnectDelay("machine-a", 0); got != 0 {
+		t.Fatalf("non-positive backoff should remain zero, got %v", got)
+	}
+}

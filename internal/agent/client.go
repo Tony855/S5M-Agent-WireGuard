@@ -3,6 +3,8 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -64,7 +66,7 @@ func (c *Client) Run(ctx context.Context) error {
 			return nil
 		}
 		c.logf("control connection ended; retrying: %v", safeError(err))
-		timer := time.NewTimer(backoff)
+		timer := time.NewTimer(reconnectDelay(c.Settings.MachineCode, backoff))
 		select {
 		case <-ctx.Done():
 			if !timer.Stop() {
@@ -78,6 +80,20 @@ func (c *Client) Run(ctx context.Context) error {
 			backoff = 60 * time.Second
 		}
 	}
+}
+
+func reconnectDelay(machineCode string, backoff time.Duration) time.Duration {
+	if backoff <= 0 {
+		return 0
+	}
+	identity := strings.TrimSpace(machineCode)
+	if identity == "" {
+		identity = "unidentified-agent"
+	}
+	sum := sha256.Sum256([]byte(identity))
+	fraction := binary.BigEndian.Uint16(sum[:2])
+	jitter := time.Duration(uint64(backoff/4) * uint64(fraction) / 65535)
+	return backoff + jitter
 }
 
 func (c *Client) register(ctx context.Context) error {
