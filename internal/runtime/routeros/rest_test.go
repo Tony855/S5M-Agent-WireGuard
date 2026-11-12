@@ -12,6 +12,7 @@ import (
 
 func TestRESTClientUsesHTTPSBasicAuthAndFixedReadResources(t *testing.T) {
 	var seen []string
+	var methods []string
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, pass, ok := r.BasicAuth()
 		if !ok || user != "s5m-monitor" || pass != "router-secret" {
@@ -19,6 +20,7 @@ func TestRESTClientUsesHTTPSBasicAuthAndFixedReadResources(t *testing.T) {
 			return
 		}
 		seen = append(seen, r.URL.Path)
+		methods = append(methods, r.Method)
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/rest/system/resource":
@@ -54,6 +56,11 @@ func TestRESTClientUsesHTTPSBasicAuthAndFixedReadResources(t *testing.T) {
 	}
 	if strings.Join(seen, ",") != "/rest/system/resource,/rest/interface/wireguard,/rest/interface/wireguard/peers,/rest/ip/address" {
 		t.Fatalf("unexpected REST paths: %v", seen)
+	}
+	for _, method := range methods {
+		if method != http.MethodGet {
+			t.Fatalf("read-only RouterOS adapter used unexpected HTTP method %q", method)
+		}
 	}
 }
 

@@ -3,8 +3,11 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -88,5 +91,51 @@ func TestRunReconnectsAfterWebSocketDisconnect(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("second WebSocket session did not complete")
+	}
+}
+
+func TestWebSocketAcceptsConcurrentAgentSessions(t *testing.T) {
+	const clients = 100
+	var accepted atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := (&websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}).Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		accepted.Add(1)
+		_ = conn.WriteJSON(map[string]any{"type": "welcome", "protocol": 1, "heartbeat_interval_sec": 30})
+		_ = conn.Close()
+	}))
+	defer server.Close()
+
+	var wg sync.WaitGroup
+	errs := make(chan error, clients)
+	for i := 0; i < clients; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
+			if err != nil {
+				errs <- err
+				return
+			}
+			defer conn.Close()
+			var welcome map[string]any
+			if err := conn.ReadJSON(&welcome); err != nil {
+				errs <- err
+				return
+			}
+			if welcome["type"] != "welcome" {
+				errs <- errors.New("unexpected WebSocket welcome envelope")
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("concurrent WebSocket session failed: %v", err)
+	}
+	if got := accepted.Load(); got != clients {
+		t.Fatalf("accepted concurrent WebSocket sessions = %d, want %d", got, clients)
 	}
 }

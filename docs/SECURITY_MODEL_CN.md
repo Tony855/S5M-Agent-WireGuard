@@ -44,3 +44,15 @@
 - 命令 ID 是去重安全边界。即使命令 deadline 已经过期，Agent 仍必须保留该 ID 的终态记录，防止延迟重投或被延长 deadline 的同 ID 命令在记录删除后再次执行。
 - 因此达到 4096 条记录上限时，Journal 必须 fail closed；不得自动删除终态记录来释放容量。
 - 后续若要支持长期运行下的自动回收，必须先定义可验证的命令 ID epoch/签名与最大重投期限，或实现有明确安全边界的 tombstone 归档协议；不能仅凭本地 deadline 删除去重证据。
+
+
+## 下一阶段六项安全实施边界（2026-11）
+
+1. **Linux Apply 安全 reconcile**：当前只允许创建新接口；若接口已存在，原子创建失败后必须立即停止，绝不能进入删除/覆盖路径。下一阶段需先定义 Agent 所有权 marker、期望配置指纹和 revision，再实现仅对已确认自有资源的快照、更新、验证和回滚。在此之前不支持更新已有接口。
+2. **Journal 归档**：当前 4096 条记录达到上限后 fail closed，永久保留 command ID 去重证据。自动归档/清理暂不开放；须先定义 Master 最大重投窗口、ID epoch/签名、归档校验和灾难恢复流程。
+3. **重启状态对账**：Agent 重启把 running 标记为 interrupted，禁止自动 replay。Master 与 Agent 的 desired/applied 状态需要通过 revision、command ID 和运行态证据显式对账，不能仅凭心跳在线状态推断已应用。
+4. **Master 写命令策略**：在 Agent Runtime 的 Apply/Stop 所有权、快照和回滚安全机制完成前，Master 必须继续拒绝 WireGuard apply/stop/status 写入路径；只读能力也应独立授权。不得因为 Agent 端存在 typed dispatcher 就放开 Master 命令。
+5. **RouterOS Runtime**：当前 REST adapter 仅支持固定 HTTPS GET 资源，强制证书验证、拒绝重定向并限制响应大小。写操作仍关闭；未来需先做 RouterOS 版本/能力探测、资源唯一标识与 S5M ownership comment/tag、前后状态快照、分阶段 apply/verify/rollback，再安排真实 RouterOS 设备验收。
+6. **并发/持续负载**：CI 中的并发连接测试只证明测试服务器可接受指定数量的短连接，不等同真实设备容量。生产验收还必须覆盖长连接、断线重连风暴、心跳与命令 ACK、Master 重启、SQLite 锁竞争、慢客户端和资源上限。不得将短连接模拟报告为真实 500 台设备承载能力。
+
+本轮补充的测试分别覆盖 Journal 并发重复 ID 仅允许一次执行、Agent WebSocket 并发会话接入，以及 RouterOS 只读请求只能使用 GET。它们是安全边界回归测试，不代表上述尚未实现的 reconcile、归档、RouterOS 写入或生产负载能力已经完成。
