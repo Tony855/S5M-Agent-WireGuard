@@ -140,7 +140,6 @@ func TestWebSocketAcceptsConcurrentAgentSessions(t *testing.T) {
 	}
 }
 
-
 func TestReconnectDelayIsStableAndBoundedPerMachine(t *testing.T) {
 	const base = 20 * time.Second
 	first := reconnectDelay("machine-a", base)
