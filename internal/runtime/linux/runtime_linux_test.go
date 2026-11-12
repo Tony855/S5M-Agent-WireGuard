@@ -5,6 +5,7 @@ package linux
 import (
 	"context"
 	"errors"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -474,5 +475,82 @@ func TestApplyRefusesExistingManagedInterfaceWithoutDeletingIt(t *testing.T) {
 		if strings.Contains(call, "ip link delete") || strings.HasPrefix(call, "wg setconf ") {
 			t.Fatalf("existing interface must not be modified or deleted: %v", fake.calls)
 		}
+	}
+}
+
+
+func TestApplyWritesVersionedOwnershipMetadata(t *testing.T) {
+	dir, _, runtime := setup(t)
+	cfg := testConfig()
+	if err := runtime.Apply(context.Background(), cfg); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "runtime", "wgtest.managed"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var marker managedMarkerV2
+	if err := json.Unmarshal(data, &marker); err != nil {
+		t.Fatalf("decode ownership marker: %v", err)
+	}
+	fingerprint, err := configFingerprint(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if marker.Version != managedMarkerVersion || marker.Interface != "wgtest" ||
+		marker.ConfigSHA256 != fingerprint || marker.Revision != fingerprint || marker.UpdatedAt.IsZero() {
+		t.Fatalf("unexpected ownership metadata: %+v", marker)
+	}
+}
+
+func TestVerifyManagedMarkerAcceptsLegacyV1(t *testing.T) {
+	_, _, runtime := setup(t)
+	markManaged(t, runtime, "wgtest")
+	if err := runtime.verifyManagedMarker("wgtest"); err != nil {
+		t.Fatalf("legacy marker must remain readable: %v", err)
+	}
+}
+
+func TestVerifyManagedMarkerRejectsTamperedV2(t *testing.T) {
+	dir, _, runtime := setup(t)
+	if err := runtime.writeManagedStateMarker("wgtest", testConfig()); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "runtime", "wgtest.managed")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var marker managedMarkerV2
+	if err := json.Unmarshal(data, &marker); err != nil {
+		t.Fatal(err)
+	}
+	marker.ConfigSHA256 = strings.Repeat("0", 64)
+	tampered, err := json.Marshal(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, tampered, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.verifyManagedMarker("wgtest"); err == nil {
+		t.Fatal("tampered ownership metadata must be rejected")
+	}
+}
+
+func TestConfigFingerprintChangesWithConfiguration(t *testing.T) {
+	first := testConfig()
+	second := testConfig()
+	second.Interface.MTU++
+	a, err := configFingerprint(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := configFingerprint(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == b {
+		t.Fatal("configuration change did not change fingerprint")
 	}
 }
