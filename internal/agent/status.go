@@ -22,7 +22,7 @@ func BuildWireGuardStatus(ctx context.Context, configPath, dataDir, agentVersion
 		"backend": "linux-kernel", "available": false, "interface_name": "wg0",
 		"interface_up": false, "role": "server", "listen_port": float64(0),
 		"peer_count": float64(0), "rx_bytes": float64(0), "tx_bytes": float64(0),
-		"config_sha256": "", "desired_revision": "", "applied_revision": "",
+		"config_sha256": "", "desired_revision": "", "applied_revision": "", "reconcile_state": "desired_unknown",
 		"last_error": "", "os": goruntime.GOOS, "arch": goruntime.GOARCH,
 		"agent_version": agentVersion,
 	}
@@ -32,11 +32,13 @@ func BuildWireGuardStatus(ctx context.Context, configPath, dataDir, agentVersion
 	cfg, err := config.LoadWithDataDir(configPath, dataDir)
 	if err != nil {
 		status["last_error"] = "WireGuard configuration is missing or invalid"
+		status["reconcile_state"] = "desired_invalid"
 		return status
 	}
 	revision, err := ConfigRevision(cfg)
 	if err != nil {
 		status["last_error"] = "WireGuard configuration revision could not be calculated"
+		status["reconcile_state"] = "desired_revision_unavailable"
 		return status
 	}
 	status["config_sha256"] = revision
@@ -47,6 +49,7 @@ func BuildWireGuardStatus(ctx context.Context, configPath, dataDir, agentVersion
 	status["listen_port"] = float64(cfg.Interface.ListenPort)
 	if runtime == nil {
 		status["last_error"] = "WireGuard runtime is unavailable in this build"
+		status["reconcile_state"] = "runtime_unavailable"
 		return status
 	}
 	caps := runtime.Probe(ctx)
@@ -58,11 +61,13 @@ func BuildWireGuardStatus(ctx context.Context, configPath, dataDir, agentVersion
 		} else {
 			status["last_error"] = "configured WireGuard backend is not available in this build"
 		}
+		status["reconcile_state"] = "backend_unavailable"
 		return status
 	}
 	result, statusErr := runtime.Status(ctx, cfg.Interface.Name)
 	if statusErr != nil {
 		status["last_error"] = "WireGuard runtime status is unavailable"
+		status["reconcile_state"] = "runtime_unknown"
 		return status
 	}
 	status["interface_up"] = result.Running
@@ -75,13 +80,21 @@ func BuildWireGuardStatus(ctx context.Context, configPath, dataDir, agentVersion
 	}
 	status["rx_bytes"] = boundedCounter(rx)
 	status["tx_bytes"] = boundedCounter(tx)
-	if result.Running {
-		if applied, err := ReadAppliedRevision(dataDir, cfg.Interface.Name); err == nil && applied == revision {
-			status["applied_revision"] = applied
+	if !result.Running {
+		status["reconcile_state"] = "runtime_stopped"
+	} else if applied, readErr := ReadAppliedRevision(dataDir, cfg.Interface.Name); readErr != nil {
+		status["reconcile_state"] = "applied_revision_unavailable"
+	} else {
+		status["applied_revision"] = applied
+		if applied == revision {
+			status["reconcile_state"] = "in_sync"
+		} else {
+			status["reconcile_state"] = "revision_drift"
 		}
 	}
 	if strings.TrimSpace(result.LastError) != "" {
 		status["last_error"] = safeStatusText(result.LastError, 2048)
+		status["reconcile_state"] = "runtime_degraded"
 	}
 	return status
 }
