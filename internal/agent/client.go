@@ -82,7 +82,6 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 }
 
-
 func reconnectDelay(machineCode string, backoff time.Duration) time.Duration {
 	if backoff <= 0 {
 		return 0
