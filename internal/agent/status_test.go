@@ -49,7 +49,7 @@ func TestBuildWireGuardStatusReportsRuntimeWithoutSecrets(t *testing.T) {
 	if status["rx_bytes"] != float64(100) || status["tx_bytes"] != float64(200) {
 		t.Fatalf("unexpected transfer counters: %#v", status)
 	}
-	if status["config_sha256"] == "" || status["desired_revision"] == "" || status["applied_revision"] != "" {
+	if status["config_sha256"] == "" || status["desired_revision"] == "" || status["applied_revision"] != "" || status["reconcile_state"] != "applied_revision_unavailable" {
 		t.Fatalf("desired config hash must be reported without claiming an unjournaled apply: %#v", status)
 	}
 	if _, exists := status["private_key"]; exists {
@@ -130,16 +130,34 @@ func TestBuildWireGuardStatusReportsOnlyMatchingAppliedRevision(t *testing.T) {
 		status: wr.Status{Interface: "wg0", Backend: "linux-kernel", Running: true},
 	}
 	status := BuildWireGuardStatus(context.Background(), configPath, dir, "test-version", runtime)
-	if status["applied_revision"] != revision {
-		t.Fatalf("matching applied revision not reported: %#v", status)
+	if status["applied_revision"] != revision || status["reconcile_state"] != "in_sync" {
+		t.Fatalf("matching applied revision not reported as in sync: %#v", status)
 	}
 	if err := RecordAppliedRevision(dir, "wg0", strings.Repeat("b", 64)); err != nil {
 		t.Fatal(err)
 	}
 	status = BuildWireGuardStatus(context.Background(), configPath, dir, "test-version", runtime)
-	if status["applied_revision"] != "" {
-		t.Fatalf("mismatched applied revision must not be reported: %#v", status)
+	if status["applied_revision"] != strings.Repeat("b", 64) || status["reconcile_state"] != "revision_drift" {
+		t.Fatalf("mismatched applied revision must be visible as drift: %#v", status)
 	}
 }
 
 func ptrTime(value time.Time) *time.Time { return &value }
+
+
+func TestBuildWireGuardStatusReportsStoppedRuntime(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	yaml := "apiVersion: s5m.wireguard/v1alpha1\ninterface:\n  name: wg0\n  role: server\n  backend: linux-kernel\n  privateKeyFile: secrets/server.key\n  addresses:\n    - 10.77.0.1/24\npeers: []\n"
+	if err := os.WriteFile(configPath, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runtime := fakeRuntime{
+		caps: wr.Capabilities{Backend: "linux-kernel", Available: true},
+		status: wr.Status{Interface: "wg0", Backend: "linux-kernel", Running: false},
+	}
+	status := BuildWireGuardStatus(context.Background(), configPath, dir, "test-version", runtime)
+	if status["reconcile_state"] != "runtime_stopped" {
+		t.Fatalf("stopped interface reconciliation state = %#v", status["reconcile_state"])
+	}
+}
