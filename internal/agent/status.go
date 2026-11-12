@@ -142,9 +142,8 @@ func RecordAppliedRevision(dataDir, interfaceName, revision string) error {
 	if err := os.Rename(tmpPath, filepath.Join(dir, interfaceName+".applied")); err != nil {
 		return fmt.Errorf("commit applied revision journal: %w", err)
 	}
-	if directory, err := os.Open(dir); err == nil {
-		_ = directory.Sync()
-		_ = directory.Close()
+	if err := syncRevisionDirectory(dir); err != nil {
+		return fmt.Errorf("sync applied revision directory: %w", err)
 	}
 	return nil
 }
@@ -198,11 +197,19 @@ func ClearAppliedRevision(dataDir, interfaceName string) error {
 	if err := os.Remove(path); err != nil {
 		return err
 	}
-	if directory, err := os.Open(dir); err == nil {
-		_ = directory.Sync()
-		_ = directory.Close()
+	if err := syncRevisionDirectory(dir); err != nil {
+		return fmt.Errorf("sync applied revision directory after removal: %w", err)
 	}
 	return nil
+}
+
+func syncRevisionDirectory(dir string) error {
+	directory, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
 }
 
 func safeRevisionDirectory(dataDir string, create bool) (string, error) {
