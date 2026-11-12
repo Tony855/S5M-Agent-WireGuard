@@ -31,7 +31,7 @@ func TestBuildWireGuardStatusReportsRuntimeWithoutSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtime := fakeRuntime{
-		caps: wr.Capabilities{Backend: "linux-kernel", Available: true},
+		caps:   wr.Capabilities{Backend: "linux-kernel", Available: true},
 		status: wr.Status{
 			Interface: "wg0", Backend: "linux-kernel", Running: true, ListenPort: 51820,
 			Peers: []wr.PeerStatus{
@@ -143,7 +143,6 @@ func TestBuildWireGuardStatusReportsOnlyMatchingAppliedRevision(t *testing.T) {
 }
 
 func ptrTime(value time.Time) *time.Time { return &value }
-
 
 func TestBuildWireGuardStatusReportsStoppedRuntime(t *testing.T) {
 	dir := t.TempDir()
