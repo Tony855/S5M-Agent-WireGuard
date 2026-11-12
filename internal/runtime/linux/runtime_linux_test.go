@@ -478,7 +478,6 @@ func TestApplyRefusesExistingManagedInterfaceWithoutDeletingIt(t *testing.T) {
 	}
 }
 
-
 func TestApplyWritesVersionedOwnershipMetadata(t *testing.T) {
 	dir, _, runtime := setup(t)
 	cfg := testConfig()
